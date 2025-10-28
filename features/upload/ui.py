@@ -74,8 +74,7 @@ def render_upload_ui() -> ui.Tag:
                     control=ui.input_select(
                         "time_column",
                         "Seleccionar columna de tiempo",
-                        choices={},
-                        class_="form-control"
+                        choices={}
                     ),
                     help_text="Columna que contiene las fechas o timestamps"
                 ),
@@ -84,8 +83,7 @@ def render_upload_ui() -> ui.Tag:
                     control=ui.input_select(
                         "value_column",
                         "Seleccionar columna de valores",
-                        choices={},
-                        class_="form-control"
+                        choices={}
                     ),
                     help_text="Columna que contiene los valores de la serie temporal"
                 ),

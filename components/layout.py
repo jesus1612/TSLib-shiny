@@ -6,8 +6,8 @@ def create_app_layout(title: str, subtitle: str = None) -> ui.Tag:
     
     header = ui.div(
         ui.div(
-            ui.h1(title, class_="app-title"),
-            ui.p(subtitle, class_="app-subtitle") if subtitle else None,
+            ui.tags.h1(title, class_="app-title"),
+            ui.tags.p(subtitle, class_="app-subtitle") if subtitle else None,
             class_="container-fluid"
         ),
         class_="app-header"
@@ -26,8 +26,8 @@ def create_card(title: str, content: ui.Tag, subtitle: str = None) -> ui.Tag:
     
     return ui.div(
         ui.div(
-            ui.h3(title, class_="card-title"),
-            ui.p(subtitle, class_="card-subtitle") if subtitle else None,
+            ui.tags.h3(title, class_="card-title"),
+            ui.tags.p(subtitle, class_="card-subtitle") if subtitle else None,
             class_="card-header"
         ),
         ui.div(content, class_="card-body"),
@@ -41,7 +41,7 @@ def create_metric_card(value: str, label: str, icon: str = None) -> ui.Tag:
         ui.div(
             ui.div(icon, class_="metric-icon") if icon else None,
             ui.div(value, class_="metric-value"),
-            ui.p(label, class_="metric-label"),
+            ui.tags.p(label, class_="metric-label"),
             class_="metric-content"
         ),
         class_="metric-card"
@@ -51,9 +51,9 @@ def create_form_group(label: str, control: ui.Tag, help_text: str = None) -> ui.
     """Create a form group with label and control"""
     
     return ui.div(
-        ui.label(label, class_="form-label"),
+        ui.tags.label(label, class_="form-label"),
         control,
-        ui.small(help_text, class_="form-help") if help_text else None,
+        ui.tags.small(help_text, class_="form-help") if help_text else None,
         class_="form-group"
     )
 

@@ -20,12 +20,12 @@ def render_model_selection_ui() -> ui.Tag:
                     ui.div(
                         create_form_group(
                             label="Orden AR (p)",
-                            control=ui.input_numeric("ar_order", "Orden AR", value=1, min=0, max=10, class_="form-control"),
+                            control=ui.input_numeric("ar_order", "Orden AR", value=1, min=0, max=10),
                             help_text="Número de términos autorregresivos"
                         ),
                         create_form_group(
                             label="Orden MA (q)",
-                            control=ui.input_numeric("ma_order", "Orden MA", value=1, min=0, max=10, class_="form-control"),
+                            control=ui.input_numeric("ma_order", "Orden MA", value=1, min=0, max=10),
                             help_text="Número de términos de media móvil"
                         ),
                         class_="col-md-6"
@@ -33,12 +33,12 @@ def render_model_selection_ui() -> ui.Tag:
                     ui.div(
                         create_form_group(
                             label="Diferenciación (d)",
-                            control=ui.input_numeric("diff_order", "Orden de diferenciación", value=1, min=0, max=3, class_="form-control"),
+                            control=ui.input_numeric("diff_order", "Orden de diferenciación", value=1, min=0, max=3),
                             help_text="Número de diferencias para estacionariedad"
                         ),
                         create_form_group(
                             label="Paralelización",
-                            control=ui.input_slider("n_jobs", "Número de trabajos paralelos", min=1, max=8, value=4, class_="form-control"),
+                            control=ui.input_slider("n_jobs", "Número de trabajos paralelos", min=1, max=8, value=4),
                             help_text="Número de procesos paralelos para optimización"
                         ),
                         class_="col-md-6"
