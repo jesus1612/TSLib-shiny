@@ -20,7 +20,7 @@ class StepperComponent:
         """Render stepper header with title and progress"""
         return ui.div(
             ui.div(
-                ui.h2(
+                ui.tags.h2(
                     self.steps[self.current_step]["title"],
                     class_="stepper-title"
                 ),

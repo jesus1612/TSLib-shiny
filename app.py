@@ -55,7 +55,7 @@ app_ui = ui.page_fluid(
               --bg-hover: #404040;
               --text-primary: #ffffff;
               --text-secondary: #b3b3b3;
-              --text-muted: #808080;
+              --text-muted: #cccccc;
               --accent-primary: #00d4aa;
               --accent-secondary: #0099cc;
               --accent-danger: #ff6b6b;
@@ -331,6 +331,154 @@ app_ui = ui.page_fluid(
             .justify-center { justify-content: center; }
             .justify-between { justify-content: space-between; }
             .align-center { align-items: center; }
+            
+            /* Form elements styling */
+            .form-label {
+              color: var(--text-primary) !important;
+              font-weight: 500;
+              margin-bottom: var(--spacing-xs);
+              display: block;
+            }
+            
+            .form-help {
+              color: var(--text-secondary) !important;
+              font-size: var(--font-size-xs);
+              margin-top: var(--spacing-xs);
+            }
+            
+            /* Ensure all labels are visible */
+            label {
+              color: var(--text-primary) !important;
+            }
+            
+            /* Ensure all small text is visible */
+            small {
+              color: var(--text-secondary) !important;
+            }
+            
+            /* Input styling */
+            input[type="number"], input[type="text"], input[type="email"], input[type="password"], 
+            select, textarea {
+              background-color: var(--bg-tertiary);
+              border: 1px solid var(--border-color);
+              border-radius: var(--radius-md);
+              color: var(--text-primary);
+              padding: var(--spacing-sm) var(--spacing-md);
+              font-size: var(--font-size-sm);
+            }
+            
+            input[type="number"]:focus, input[type="text"]:focus, input[type="email"]:focus, 
+            input[type="password"]:focus, select:focus, textarea:focus {
+              outline: none;
+              border-color: var(--accent-primary);
+              box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.2);
+            }
+            
+            /* Switch styling */
+            .form-check-input {
+              background-color: var(--bg-tertiary);
+              border-color: var(--border-color);
+            }
+            
+            .form-check-input:checked {
+              background-color: var(--accent-primary);
+              border-color: var(--accent-primary);
+            }
+            
+            .form-check-label {
+              color: var(--text-primary);
+              margin-left: var(--spacing-sm);
+            }
+            
+            /* Slider styling */
+            input[type="range"] {
+              background: var(--bg-tertiary);
+              border-radius: var(--radius-md);
+            }
+            
+            input[type="range"]::-webkit-slider-thumb {
+              background: var(--accent-primary);
+              border-radius: 50%;
+            }
+            
+            input[type="range"]::-moz-range-thumb {
+              background: var(--accent-primary);
+              border-radius: 50%;
+            }
+            
+            /* Status indicators */
+            .status-indicator {
+              padding: var(--spacing-xs) var(--spacing-sm);
+              border-radius: var(--radius-sm);
+              font-size: var(--font-size-sm);
+              font-weight: 500;
+            }
+            
+            .status-info {
+              background-color: rgba(0, 153, 204, 0.2);
+              color: var(--accent-secondary);
+              border: 1px solid var(--accent-secondary);
+            }
+            
+            .status-success {
+              background-color: rgba(107, 207, 127, 0.2);
+              color: var(--accent-success);
+              border: 1px solid var(--accent-success);
+            }
+            
+            .status-warning {
+              background-color: rgba(255, 217, 61, 0.2);
+              color: var(--accent-warning);
+              border: 1px solid var(--accent-warning);
+            }
+            
+            .status-danger {
+              background-color: rgba(255, 107, 107, 0.2);
+              color: var(--accent-danger);
+              border: 1px solid var(--accent-danger);
+            }
+            
+            /* Progress steps */
+            .progress-step {
+              color: var(--text-secondary);
+              font-size: var(--font-size-sm);
+              padding: var(--spacing-xs) 0;
+              border-left: 2px solid var(--border-color);
+              padding-left: var(--spacing-sm);
+              margin-bottom: var(--spacing-xs);
+            }
+            
+            .progress-list {
+              margin-top: var(--spacing-sm);
+            }
+            
+            /* Button variants */
+            .btn-lg {
+              padding: var(--spacing-md) var(--spacing-xl);
+              font-size: var(--font-size-lg);
+            }
+            
+            .btn-warning {
+              background-color: var(--accent-warning);
+              color: var(--bg-primary);
+            }
+            
+            .btn-warning:hover {
+              background-color: #e6c200;
+              transform: translateY(-1px);
+              box-shadow: var(--shadow-md);
+            }
+            
+            .btn-danger {
+              background-color: var(--accent-danger);
+              color: var(--bg-primary);
+            }
+            
+            .btn-danger:hover {
+              background-color: #ff5252;
+              transform: translateY(-1px);
+              box-shadow: var(--shadow-md);
+            }
             """
         )
     ),
@@ -341,8 +489,9 @@ app_ui = ui.page_fluid(
         subtitle="Pipeline completo para análisis avanzado con modelos ARIMA"
     ),
     
-    # Stepper header
-    stepper.render_header(),
+    
+    # Stepper header output
+    ui.output_ui("stepper_header"),
     
     # Main content area
     ui.div(
@@ -351,8 +500,8 @@ app_ui = ui.page_fluid(
         class_="container-fluid"
     ),
     
-    # Stepper navigation
-    stepper.render_navigation()
+    # Stepper navigation output
+    ui.output_ui("stepper_navigation")
 )
 
 # Define the server logic
@@ -368,6 +517,51 @@ def server(input, output, session):
         "selected_model": None,
         "results": None
     })
+    
+    # Stepper header renderer
+    @render.ui
+    def stepper_header():
+        """Render stepper header reactively"""
+        current_step = app_state.get()["current_step"]
+        return ui.div(
+            ui.div(
+                ui.tags.h2(
+                    STEPS[current_step]["title"],
+                    class_="stepper-title"
+                ),
+                ui.div(
+                    f"Paso {current_step + 1} de {len(STEPS)}",
+                    class_="stepper-progress"
+                ),
+                class_="stepper-header"
+            ),
+            class_="stepper-container"
+        )
+    
+    # Stepper navigation renderer
+    @render.ui
+    def stepper_navigation():
+        """Render stepper navigation reactively"""
+        current_step = app_state.get()["current_step"]
+        return ui.div(
+            ui.div(
+                ui.input_action_button(
+                    "prev_step",
+                    "← Anterior",
+                    class_="btn btn-secondary"
+                ) if current_step > 0 else ui.div(),
+                class_="d-flex"
+            ),
+            ui.div(
+                ui.input_action_button(
+                    "next_step",
+                    "Siguiente →" if current_step < len(STEPS) - 1 else "Finalizar",
+                    class_="btn btn-primary"
+                ),
+                class_="d-flex"
+            ),
+            class_="stepper-navigation"
+        )
     
     # Step content renderer
     @render.ui
