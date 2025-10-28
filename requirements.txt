@@ -1,20 +1,6 @@
-# Core Shiny framework
-shiny>=0.6.0
-
-# Data manipulation
-pandas>=1.5.0
+shiny>=0.5.0
+pandas>=2.0.0
 numpy>=1.24.0
-
-# Visualization
-plotly>=5.17.0
-
-# File handling
-openpyxl>=3.1.0
-python-multipart>=0.0.6
-
-# Scientific computing
+matplotlib>=3.7.0
+plotly>=5.15.0
 scipy>=1.10.0
-matplotlib>=3.6.0
-
-# Future TSLib integration
-# (TSLib will be added later)

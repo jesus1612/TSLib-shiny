@@ -1,114 +1,150 @@
-# TSLib Shiny App
+# TSLib Shiny App - Análisis de Series de Tiempo
 
-Una aplicación web profesional para análisis de series temporales usando TSLib como backend.
+Una aplicación web interactiva desarrollada con **Shiny for Python** para análisis avanzado de series de tiempo usando la librería TSLib.
 
-## Características
+## 🚀 Características
 
-- 🎯 **Interfaz intuitiva** para usuarios no técnicos
-- 📊 **Visualizaciones interactivas** con Plotly
-- 🔧 **Configuración flexible** de modelos ARIMA
-- 📈 **Análisis completo** con diagnósticos y predicciones
-- 🎨 **Diseño profesional** y minimalista
+- **Pipeline completo** de análisis de series de tiempo
+- **Interfaz wizard/stepper** intuitiva
+- **Tema oscuro profesional** 
+- **Arquitectura basada en eventos** reactivos
+- **Organización modular** por features
+- **Procesamiento distribuido** (preparado para PySpark)
 
-## Instalación
+## 📋 Pipeline de Análisis
 
-1. **Clonar el repositorio:**
+1. **📁 Upload** - Carga de datasets locales
+2. **📊 Visualization** - Visualización y estadísticas iniciales  
+3. **⚙️ Model Selection** - Selección de modelos ARIMA
+4. **🔄 Execution** - Ejecución de algoritmos en servidor
+5. **📈 Results** - Visualización de resultados y métricas
+6. **📄 Reports** - Generación de reportes descargables
+
+## 🛠️ Instalación
+
+### Prerrequisitos
+- Python 3.8+
+- pip
+
+### Pasos de instalación
+
+1. **Clonar el repositorio**
 ```bash
 git clone <repository-url>
 cd tslib-shiny-app
 ```
 
-2. **Crear entorno virtual:**
+2. **Instalar dependencias (crea entorno virtual automáticamente)**
 ```bash
-python -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
+make install
 ```
 
-3. **Instalar dependencias:**
-```bash
-pip install -r requirements.txt
-```
+El Makefile detectará automáticamente si necesitas un entorno virtual y lo creará por ti.
 
-4. **Ejecutar la aplicación:**
+3. **Ejecutar la aplicación**
 ```bash
+make run
+# o manualmente:
 python app.py
 ```
 
-5. **Abrir en el navegador:**
-La aplicación estará disponible en `http://localhost:8000`
+4. **Abrir en el navegador**
+La aplicación estará disponible en: `http://localhost:8000`
 
-## Uso
-
-### Flujo de Trabajo
-
-1. **Cargar Datos**: Sube un archivo CSV/Excel o usa datos de ejemplo
-2. **Explorar**: Visualiza la serie temporal y estadísticas básicas
-3. **Configurar**: Ajusta parámetros del modelo ARIMA (p, d, q)
-4. **Ajustar**: Entrena el modelo con tus datos
-5. **Diagnosticar**: Revisa gráficos de residuos y métricas
-6. **Predecir**: Genera predicciones futuras con intervalos de confianza
-
-### Datos de Ejemplo
-
-La aplicación incluye tres datasets de ejemplo:
-- **airline_passengers.csv**: Serie clásica con tendencia y estacionalidad
-- **temperature.csv**: Temperatura diaria con variaciones suaves
-- **sales.csv**: Ventas mensuales con tendencia y ruido
-
-## Estructura del Proyecto
+## 📁 Estructura del Proyecto
 
 ```
 tslib-shiny-app/
-├── app.py                    # Aplicación principal
-├── ui/                       # Componentes de interfaz
-│   ├── components.py        # Componentes reutilizables
-│   └── layouts.py           # Layouts y estructura
-├── server/                   # Lógica del servidor
-│   ├── data_handler.py      # Procesamiento de datos
-│   ├── model_handler.py     # Ajuste de modelos
-│   └── visualization.py     # Generación de gráficos
-├── utils/                    # Utilidades
-│   └── tslib_interface.py   # Interface con TSLib
-├── data/examples/           # Datos de ejemplo
-├── static/                  # Assets estáticos (CSS)
-└── requirements.txt         # Dependencias
+├── app.py                    # Entry point
+├── features/                 # Módulos por feature
+│   ├── upload/              # Carga de datos
+│   ├── visualization/       # Visualización
+│   ├── model_selection/     # Selección de modelos
+│   ├── execution/           # Ejecución
+│   ├── results/             # Resultados
+│   └── reports/             # Reportes
+├── components/              # Componentes reutilizables
+├── static/                  # CSS y assets
+├── data/examples/           # Datasets de ejemplo
+├── requirements.txt         # Dependencias
+├── Makefile                # Comandos de desarrollo
+└── README.md               # Este archivo
 ```
 
-## Tecnologías
+## 🎯 Uso
 
-- **Shiny for Python**: Framework web reactivo
-- **TSLib**: Librería de análisis de series temporales
-- **Plotly**: Visualizaciones interactivas
-- **Pandas**: Manipulación de datos
-- **NumPy**: Operaciones numéricas
+1. **Cargar datos**: Sube un archivo CSV/Excel con tu serie temporal
+2. **Explorar**: Visualiza la serie y analiza estadísticas básicas
+3. **Configurar**: Selecciona parámetros del modelo ARIMA
+4. **Ejecutar**: Inicia el análisis en el servidor
+5. **Evaluar**: Revisa resultados y métricas de rendimiento
+6. **Exportar**: Descarga reportes y datos procesados
 
-## Desarrollo
+## 📊 Datasets de Ejemplo
 
-### Arquitectura Event-Driven
+El proyecto incluye datasets de ejemplo en `data/examples/`:
+- `sales.csv` - Serie temporal de ventas
+- `temperature.csv` - Serie de temperaturas
 
-La aplicación sigue un paradigma orientado a eventos:
-- **UI Components**: Elementos de interfaz con IDs únicos
-- **Event Handlers**: Funciones que responden a interacciones del usuario
-- **Estado Reactivo**: Variables que almacenan el estado actual
+## 🛠️ Comandos de Desarrollo
 
-### Agregar Nuevos Componentes
+```bash
+make install    # Instalar dependencias (crea venv automáticamente)
+make run        # Ejecutar aplicación (requiere venv)
+make clean      # Limpiar archivos temporales
+make clean-all  # Limpiar todo incluyendo entorno virtual
+make format     # Formatear código
+make help       # Ver ayuda
+```
 
-1. Crear función en `ui/components.py`
-2. Agregar event handler en `app.py`
-3. Actualizar layout en `ui/layouts.py`
+### ⚠️ Notas Importantes:
+- **`make run` requiere entorno virtual**: Si no existe, te pedirá ejecutar `make install` primero
+- **`make install` es inteligente**: Crea el entorno virtual automáticamente si no existe
+- **`make clean-all`**: Elimina completamente el entorno virtual si necesitas empezar de cero
 
-## Contribuir
+## 🏗️ Arquitectura
+
+- **Frontend**: Shiny UI con componentes reactivos
+- **Backend**: Lógica de procesamiento con TSLib
+- **Paradigma**: Event-driven programming
+- **Estado**: Reactive values y session state
+- **Estilos**: CSS custom con tema oscuro
+
+## 🔧 Tecnologías
+
+- **Shiny for Python** - Framework web reactivo
+- **TSLib** - Librería de análisis de series de tiempo
+- **Pandas/NumPy** - Manipulación de datos
+- **Matplotlib/Plotly** - Visualizaciones
+- **PySpark** - Procesamiento distribuido (opcional)
+
+## 📝 Notas de Desarrollo
+
+- **UI en español**, comentarios en inglés
+- **Placeholders** para funcionalidad backend
+- **Tema oscuro** profesional
+- **Responsive design** básico
+- **Arquitectura escalable** para futuras funcionalidades
+
+## 🤝 Contribución
 
 1. Fork el proyecto
-2. Crear rama para feature (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit cambios (`git commit -am 'Agregar nueva funcionalidad'`)
+2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit tus cambios (`git commit -m 'Agregar nueva funcionalidad'`)
 4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
-5. Crear Pull Request
+5. Abre un Pull Request
 
-## Licencia
+## 📄 Licencia
 
-MIT License - Ver [LICENSE](LICENSE) para más detalles.
+Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para más detalles.
 
-## Autores
+## 🆘 Soporte
 
-- **Genaro Melgar** - ESCOM, Instituto Politécnico Nacional
+Si tienes problemas o preguntas:
+- Abre un issue en GitHub
+- Revisa la documentación de [Shiny for Python](https://shiny.posit.co/py/)
+- Consulta la documentación de TSLib
+
+---
+
+**Desarrollado con ❤️ para análisis avanzado de series de tiempo**

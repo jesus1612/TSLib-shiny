@@ -1,445 +1,504 @@
-"""
-TSLib Shiny App - Main Application
-Event-driven architecture for time series analysis
-"""
+# Main Shiny application for TSLib Time Series Analysis
+from shiny import App, ui, reactive, render
+from components.stepper import StepperComponent
+from components.layout import create_app_layout
+from features.upload.ui import render_upload_ui
+from features.visualization.ui import render_visualization_ui
+from features.model_selection.ui import render_model_selection_ui
+from features.execution.ui import render_execution_ui
+from features.results.ui import render_results_ui
+from features.reports.ui import render_reports_ui
 
-from shiny import App, reactive, render, ui
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import os
-from pathlib import Path
+# Define the steps for the wizard
+STEPS = [
+    {
+        "title": "📁 Carga de Datos",
+        "description": "Sube y configura tu serie temporal"
+    },
+    {
+        "title": "📊 Visualización",
+        "description": "Explora y analiza los datos"
+    },
+    {
+        "title": "⚙️ Selección de Modelo",
+        "description": "Configura parámetros ARIMA"
+    },
+    {
+        "title": "🚀 Ejecución",
+        "description": "Ejecuta el análisis en el servidor"
+    },
+    {
+        "title": "📈 Resultados",
+        "description": "Revisa métricas y predicciones"
+    },
+    {
+        "title": "📄 Reportes",
+        "description": "Genera y descarga reportes"
+    }
+]
 
-# Import UI components
-from ui.layouts import create_app_ui
-from ui.components import loading_spinner, success_message, error_message
+# Initialize stepper component
+stepper = StepperComponent(STEPS)
 
-# Mock data for demonstration
-MOCK_DATA = {
-    'airline': pd.DataFrame({
-        'date': pd.date_range('1949-01', periods=144, freq='ME'),
-        'passengers': [112, 118, 132, 129, 121, 135, 148, 148, 136, 119, 104, 118,
-                       115, 126, 141, 135, 125, 149, 170, 170, 158, 133, 114, 140,
-                       145, 150, 178, 163, 172, 178, 199, 199, 184, 162, 146, 166,
-                       171, 180, 193, 181, 183, 218, 230, 242, 209, 191, 172, 194,
-                       196, 196, 236, 235, 229, 243, 264, 272, 237, 211, 180, 201,
-                       204, 188, 235, 227, 234, 264, 302, 293, 259, 229, 203, 229,
-                       242, 233, 267, 269, 270, 315, 364, 347, 312, 274, 237, 278,
-                       284, 277, 317, 313, 318, 374, 413, 405, 355, 306, 271, 306,
-                       315, 301, 356, 348, 355, 422, 465, 467, 404, 347, 305, 336,
-                       340, 318, 362, 348, 363, 435, 491, 505, 404, 359, 310, 337,
-                       360, 342, 406, 396, 420, 472, 548, 559, 463, 407, 362, 405,
-                       417, 391, 419, 461, 472, 535, 622, 606, 508, 461, 390, 432]
-    }),
-    'temperature': pd.DataFrame({
-        'date': pd.date_range('2023-01-01', periods=90, freq='D'),
-        'temperature': np.random.normal(20, 5, 90) + np.sin(np.arange(90) * 2 * np.pi / 365) * 10
-    }),
-    'sales': pd.DataFrame({
-        'date': pd.date_range('2022-01', periods=36, freq='ME'),
-        'sales': np.cumsum(np.random.normal(10000, 5000, 36)) + 100000
-    })
-}
+# Define the UI
+app_ui = ui.page_fluid(
+    # Include custom CSS inline
+    ui.tags.head(
+        ui.tags.style(
+            """
+            /* TSLib Shiny App - Dark Professional Theme */
+            :root {
+              --bg-primary: #1a1a1a;
+              --bg-secondary: #2d2d2d;
+              --bg-tertiary: #3a3a3a;
+              --bg-card: #252525;
+              --bg-hover: #404040;
+              --text-primary: #ffffff;
+              --text-secondary: #b3b3b3;
+              --text-muted: #808080;
+              --accent-primary: #00d4aa;
+              --accent-secondary: #0099cc;
+              --accent-danger: #ff6b6b;
+              --accent-warning: #ffd93d;
+              --accent-success: #6bcf7f;
+              --border-color: #404040;
+              --border-light: #555555;
+              --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+              --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.4);
+              --shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.5);
+              --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              --font-size-xs: 0.75rem;
+              --font-size-sm: 0.875rem;
+              --font-size-base: 1rem;
+              --font-size-lg: 1.125rem;
+              --font-size-xl: 1.25rem;
+              --font-size-2xl: 1.5rem;
+              --font-size-3xl: 1.875rem;
+              --spacing-xs: 0.25rem;
+              --spacing-sm: 0.5rem;
+              --spacing-md: 1rem;
+              --spacing-lg: 1.5rem;
+              --spacing-xl: 2rem;
+              --spacing-2xl: 3rem;
+              --radius-sm: 0.25rem;
+              --radius-md: 0.5rem;
+              --radius-lg: 0.75rem;
+              --radius-xl: 1rem;
+            }
+            
+            body {
+              font-family: var(--font-family);
+              background-color: var(--bg-primary);
+              color: var(--text-primary);
+              line-height: 1.6;
+              margin: 0;
+              padding: 0;
+              min-height: auto;
+            }
+            
+            .main-container {
+              background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+              padding: var(--spacing-sm) 0;
+            }
+            
+            .app-header {
+              background-color: var(--bg-secondary);
+              border-bottom: 1px solid var(--border-color);
+              padding: var(--spacing-lg) var(--spacing-xl);
+              box-shadow: var(--shadow-sm);
+            }
+            
+            .app-title {
+              font-size: var(--font-size-2xl);
+              font-weight: 700;
+              color: var(--accent-primary);
+              margin: 0;
+            }
+            
+            .app-subtitle {
+              font-size: var(--font-size-sm);
+              color: var(--text-secondary);
+              margin: var(--spacing-xs) 0 0 0;
+            }
+            
+            .stepper-container {
+              background-color: var(--bg-card);
+              border-radius: var(--radius-lg);
+              padding: var(--spacing-lg);
+              margin: var(--spacing-md);
+              box-shadow: var(--shadow-md);
+            }
+            
+            .stepper-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: var(--spacing-xl);
+              padding-bottom: var(--spacing-lg);
+              border-bottom: 1px solid var(--border-color);
+            }
+            
+            .stepper-title {
+              font-size: var(--font-size-xl);
+              font-weight: 600;
+              color: var(--text-primary);
+              margin: 0;
+            }
+            
+            .stepper-progress {
+              font-size: var(--font-size-sm);
+              color: var(--text-secondary);
+              background-color: var(--bg-tertiary);
+              padding: var(--spacing-sm) var(--spacing-md);
+              border-radius: var(--radius-md);
+            }
+            
+            .stepper-content {
+              min-height: 200px;
+              padding: var(--spacing-md) 0;
+            }
+            
+            .stepper-navigation {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-top: var(--spacing-xl);
+              padding-top: var(--spacing-lg);
+              border-top: 1px solid var(--border-color);
+            }
+            
+            .btn {
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              padding: var(--spacing-sm) var(--spacing-lg);
+              border: none;
+              border-radius: var(--radius-md);
+              font-size: var(--font-size-sm);
+              font-weight: 500;
+              text-decoration: none;
+              cursor: pointer;
+              transition: all 0.2s ease;
+              min-width: 100px;
+            }
+            
+            .btn-primary {
+              background-color: var(--accent-primary);
+              color: var(--bg-primary);
+            }
+            
+            .btn-primary:hover {
+              background-color: #00b894;
+              transform: translateY(-1px);
+              box-shadow: var(--shadow-md);
+            }
+            
+            .btn-secondary {
+              background-color: var(--bg-tertiary);
+              color: var(--text-primary);
+              border: 1px solid var(--border-color);
+            }
+            
+            .btn-secondary:hover {
+              background-color: var(--bg-hover);
+              border-color: var(--border-light);
+            }
+            
+            .card {
+              background-color: var(--bg-card);
+              border: 1px solid var(--border-color);
+              border-radius: var(--radius-lg);
+              padding: var(--spacing-lg);
+              margin-bottom: var(--spacing-lg);
+              box-shadow: var(--shadow-sm);
+              transition: all 0.2s ease;
+            }
+            
+            .card:hover {
+              box-shadow: var(--shadow-md);
+              border-color: var(--border-light);
+            }
+            
+            .card-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: var(--spacing-md);
+              padding-bottom: var(--spacing-sm);
+              border-bottom: 1px solid var(--border-color);
+            }
+            
+            .card-title {
+              font-size: var(--font-size-lg);
+              font-weight: 600;
+              color: var(--text-primary);
+              margin: 0;
+            }
+            
+            .card-subtitle {
+              font-size: var(--font-size-sm);
+              color: var(--text-secondary);
+              margin: var(--spacing-xs) 0 0 0;
+            }
+            
+            .file-upload-area {
+              border: 2px dashed var(--border-color);
+              border-radius: var(--radius-lg);
+              padding: var(--spacing-2xl);
+              text-align: center;
+              background-color: var(--bg-tertiary);
+              transition: all 0.2s ease;
+              cursor: pointer;
+            }
+            
+            .file-upload-area:hover {
+              border-color: var(--accent-primary);
+              background-color: var(--bg-hover);
+            }
+            
+            .file-upload-icon {
+              font-size: var(--font-size-3xl);
+              color: var(--accent-primary);
+              margin-bottom: var(--spacing-md);
+            }
+            
+            .file-upload-text {
+              font-size: var(--font-size-lg);
+              color: var(--text-primary);
+              margin-bottom: var(--spacing-sm);
+            }
+            
+            .file-upload-hint {
+              font-size: var(--font-size-sm);
+              color: var(--text-secondary);
+            }
+            
+            .metrics-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+              gap: var(--spacing-lg);
+              margin-bottom: var(--spacing-xl);
+            }
+            
+            .metric-card {
+              background-color: var(--bg-card);
+              border: 1px solid var(--border-color);
+              border-radius: var(--radius-lg);
+              padding: var(--spacing-lg);
+              text-align: center;
+              box-shadow: var(--shadow-sm);
+            }
+            
+            .metric-value {
+              font-size: var(--font-size-2xl);
+              font-weight: 700;
+              color: var(--accent-primary);
+              margin-bottom: var(--spacing-xs);
+            }
+            
+            .metric-label {
+              font-size: var(--font-size-sm);
+              color: var(--text-secondary);
+              margin: 0;
+            }
+            
+            .d-none { display: none; }
+            .d-block { display: block; }
+            .d-flex { display: flex; }
+            .d-grid { display: grid; }
+            
+            .text-center { text-align: center; }
+            .text-left { text-align: left; }
+            .text-right { text-align: right; }
+            
+            .text-muted { color: var(--text-muted); }
+            
+            .mt-1 { margin-top: var(--spacing-xs); }
+            .mt-2 { margin-top: var(--spacing-sm); }
+            .mt-3 { margin-top: var(--spacing-md); }
+            .mt-4 { margin-top: var(--spacing-lg); }
+            .mt-5 { margin-top: var(--spacing-xl); }
+            
+            .mb-1 { margin-bottom: var(--spacing-xs); }
+            .mb-2 { margin-bottom: var(--spacing-sm); }
+            .mb-3 { margin-bottom: var(--spacing-md); }
+            .mb-4 { margin-bottom: var(--spacing-lg); }
+            .mb-5 { margin-bottom: var(--spacing-xl); }
+            
+            .gap-2 { gap: var(--spacing-sm); }
+            .gap-3 { gap: var(--spacing-md); }
+            
+            .justify-center { justify-content: center; }
+            .justify-between { justify-content: space-between; }
+            .align-center { align-items: center; }
+            """
+        )
+    ),
+    
+    # Main app layout
+    create_app_layout(
+        title="TSLib - Análisis de Series de Tiempo",
+        subtitle="Pipeline completo para análisis avanzado con modelos ARIMA"
+    ),
+    
+    # Stepper header
+    stepper.render_header(),
+    
+    # Main content area
+    ui.div(
+        # Step content will be rendered here
+        ui.output_ui("step_content"),
+        class_="container-fluid"
+    ),
+    
+    # Stepper navigation
+    stepper.render_navigation()
+)
 
-# Reactive state
-current_data = reactive.Value(None)
-current_step = reactive.Value(1)
-model_fitted = reactive.Value(False)
-forecast_data = reactive.Value(None)
-
-# App UI
-app_ui = create_app_ui()
-
+# Define the server logic
 def server(input, output, session):
-    """Server logic with event handlers"""
+    """Server logic with reactive event handling"""
     
-    # ============================================================================
-    # EVENT HANDLERS - Data Loading
-    # ============================================================================
+    # Reactive values for app state
+    app_state = reactive.Value({
+        "current_step": 0,
+        "data_loaded": False,
+        "analysis_complete": False,
+        "uploaded_data": None,
+        "selected_model": None,
+        "results": None
+    })
     
-    @reactive.event(input.upload_btn)
-    def on_upload_file():
-        """Handle file upload event"""
-        print("📤 Upload button clicked")
-        # TODO: Process uploaded file
-        # For now, load mock data
-        current_data.set(MOCK_DATA['airline'])
-        current_step.set(2)
-        ui.notification_show("✅ Datos cargados exitosamente", type="success")
-    
-    @reactive.event(input.load_airline)
-    def on_load_airline():
-        """Load airline passengers example data"""
-        print("✈️ Loading airline data")
-        current_data.set(MOCK_DATA['airline'])
-        current_step.set(2)
-        ui.notification_show("✅ Datos de pasajeros aéreos cargados", type="success")
-    
-    @reactive.event(input.load_temperature)
-    def on_load_temperature():
-        """Load temperature example data"""
-        print("🌡️ Loading temperature data")
-        current_data.set(MOCK_DATA['temperature'])
-        current_step.set(2)
-        ui.notification_show("✅ Datos de temperatura cargados", type="success")
-    
-    @reactive.event(input.load_sales)
-    def on_load_sales():
-        """Load sales example data"""
-        print("💰 Loading sales data")
-        current_data.set(MOCK_DATA['sales'])
-        current_step.set(2)
-        ui.notification_show("✅ Datos de ventas cargados", type="success")
-    
-    # ============================================================================
-    # EVENT HANDLERS - Model Configuration
-    # ============================================================================
-    
-    @reactive.event(input.model_mode)
-    def on_model_mode_change():
-        """Handle model mode change (auto/manual)"""
-        print(f"⚙️ Model mode changed to: {input.model_mode()}")
-        # TODO: Show/hide manual parameters based on mode
-    
-    @reactive.event(input.param_p, input.param_d, input.param_q)
-    def on_parameter_change():
-        """Handle parameter changes"""
-        if input.model_mode() == "manual":
-            print(f"🔧 Parameters changed: p={input.param_p()}, d={input.param_d()}, q={input.param_q()}")
-    
-    @reactive.event(input.n_jobs)
-    def on_n_jobs_change():
-        """Handle n_jobs change"""
-        print(f"⚡ n_jobs changed to: {input.n_jobs()}")
-    
-    # ============================================================================
-    # EVENT HANDLERS - Model Fitting
-    # ============================================================================
-    
-    @reactive.event(input.fit_model_btn)
-    def on_fit_model():
-        """Handle model fitting event"""
-        print("🚀 Fitting model...")
-        ui.notification_show("🔄 Ajustando modelo ARIMA...", type="message")
+    # Step content renderer
+    @render.ui
+    def step_content():
+        """Render content for current step"""
+        current_step = app_state.get()["current_step"]
         
-        # TODO: Actually fit ARIMA model with TSLib
-        # For now, simulate fitting
-        import time
-        time.sleep(2)  # Simulate processing time
-        
-        model_fitted.set(True)
-        current_step.set(4)
-        ui.notification_show("✅ Modelo ajustado exitosamente", type="success")
+        if current_step == 0:
+            return render_upload_ui()
+        elif current_step == 1:
+            return render_visualization_ui()
+        elif current_step == 2:
+            return render_model_selection_ui()
+        elif current_step == 3:
+            return render_execution_ui()
+        elif current_step == 4:
+            return render_results_ui()
+        elif current_step == 5:
+            return render_reports_ui()
+        else:
+            return ui.div("Paso no válido", class_="alert alert-danger")
     
-    # ============================================================================
-    # EVENT HANDLERS - Forecasting
-    # ============================================================================
-    
-    @reactive.event(input.forecast_steps)
-    def on_forecast_steps_change():
-        """Handle forecast steps change"""
-        print(f"🔮 Forecast steps changed to: {input.forecast_steps()}")
-        # TODO: Regenerate forecast with new steps
-    
-    @reactive.event(input.download_forecast)
-    def on_download_forecast():
-        """Handle forecast download"""
-        print("💾 Downloading forecast...")
-        ui.notification_show("📥 Descargando predicciones...", type="message")
-        # TODO: Generate and download CSV
-    
-    # ============================================================================
-    # EVENT HANDLERS - Navigation
-    # ============================================================================
-    
+    # Navigation event handlers
+    @reactive.effect
     @reactive.event(input.next_step)
-    def on_next_step():
-        """Navigate to next step"""
-        current_step.set(min(current_step() + 1, 6))
-        print(f"➡️ Moving to step {current_step()}")
+    def handle_next_step():
+        """Handle next step button click"""
+        current_state = app_state.get()
+        current_step = current_state["current_step"]
+        
+        # Validate current step before proceeding
+        if validate_current_step(current_step, current_state):
+            if current_step < len(STEPS) - 1:
+                new_state = current_state.copy()
+                new_state["current_step"] = current_step + 1
+                app_state.set(new_state)
+                stepper.current_step = current_step + 1
     
+    @reactive.effect
     @reactive.event(input.prev_step)
-    def on_prev_step():
-        """Navigate to previous step"""
-        current_step.set(max(current_step() - 1, 1))
-        print(f"⬅️ Moving to step {current_step()}")
-    
-    # ============================================================================
-    # OUTPUT RENDERERS - Data Display
-    # ============================================================================
-    
-    @render.data_frame
-    def data_preview():
-        """Render data preview table"""
-        data = current_data()
-        if data is not None:
-            return data.head(10)
-        return pd.DataFrame({"Mensaje": ["No hay datos cargados"]})
-    
-    @render.plot
-    def time_series_plot():
-        """Render time series plot"""
-        data = current_data()
-        if data is not None:
-            fig = px.line(
-                data, 
-                x='date', 
-                y=data.columns[1],  # Second column is the value
-                title="Serie Temporal",
-                labels={'date': 'Fecha', data.columns[1]: 'Valor'}
-            )
-            fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                font=dict(size=12)
-            )
-            return fig
+    def handle_prev_step():
+        """Handle previous step button click"""
+        current_state = app_state.get()
+        current_step = current_state["current_step"]
         
-        # Return empty plot if no data
-        fig = go.Figure()
-        fig.add_annotation(
-            text="No hay datos para mostrar",
-            xref="paper", yref="paper",
-            x=0.5, y=0.5, showarrow=False,
-            font=dict(size=16, color="gray")
+        if current_step > 0:
+            new_state = current_state.copy()
+            new_state["current_step"] = current_step - 1
+            app_state.set(new_state)
+            stepper.current_step = current_step - 1
+    
+    # File upload handler
+    @reactive.effect
+    @reactive.event(input.file_upload)
+    def handle_file_upload():
+        """Handle file upload"""
+        if input.file_upload() is not None:
+            # Simulate data loading
+            new_state = app_state.get()
+            new_state["data_loaded"] = True
+            new_state["uploaded_data"] = {
+                "filename": input.file_upload()[0]["name"],
+                "size": input.file_upload()[0]["size"],
+                "rows": 1000,  # Mock data
+                "columns": 2
+            }
+            app_state.set(new_state)
+    
+    # Model execution handler
+    @reactive.effect
+    @reactive.event(input.start_execution)
+    def handle_start_execution():
+        """Handle model execution start"""
+        # Simulate analysis execution
+        new_state = app_state.get()
+        new_state["analysis_complete"] = True
+        new_state["selected_model"] = "ARIMA(1,1,1)"
+        new_state["results"] = {
+            "aic": 1234.56,
+            "bic": 1256.78,
+            "rmse": 15.23,
+            "mae": 12.45
+        }
+        app_state.set(new_state)
+    
+    # Report generation handler
+    @reactive.effect
+    @reactive.event(input.generate_report)
+    def handle_generate_report():
+        """Handle report generation"""
+        # Simulate report generation
+        ui.notification_show(
+            "Reporte generado exitosamente",
+            type="success",
+            duration=3
         )
-        fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=False)
-        )
-        return fig
     
-    @render.data_frame
-    def model_params_table():
-        """Render model parameters table"""
-        if model_fitted():
-            # Mock parameters
-            params_data = pd.DataFrame({
-                'Parámetro': ['AR(1)', 'MA(1)', 'Constante'],
-                'Valor': [0.8234, -0.4567, 2.3456],
-                'Error Estándar': [0.1234, 0.0987, 0.2345],
-                't-valor': [6.67, -4.63, 10.01],
-                'p-valor': [0.000, 0.000, 0.000]
-            })
-            return params_data
-        return pd.DataFrame({"Mensaje": ["Modelo no ajustado"]})
+    def validate_current_step(step: int, state: dict) -> bool:
+        """Validate if current step can proceed to next"""
+        if step == 0:  # Upload step
+            return state["data_loaded"]
+        elif step == 1:  # Visualization step
+            return state["data_loaded"]
+        elif step == 2:  # Model selection step
+            return state["data_loaded"]
+        elif step == 3:  # Execution step
+            return state["data_loaded"]
+        elif step == 4:  # Results step
+            return state["analysis_complete"]
+        elif step == 5:  # Reports step
+            return state["analysis_complete"]
+        return True
     
-    # ============================================================================
-    # OUTPUT RENDERERS - Diagnostic Plots
-    # ============================================================================
-    
-    @render.plot
-    def residuals_plot():
-        """Render residuals vs time plot"""
-        if model_fitted():
-            # Mock residuals
-            residuals = np.random.normal(0, 1, 100)
-            fig = px.line(
-                x=range(len(residuals)),
-                y=residuals,
-                title="Residuos vs Tiempo"
-            )
-            fig.add_hline(y=0, line_dash="dash", line_color="red")
-            fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                xaxis_title="Tiempo",
-                yaxis_title="Residuos"
-            )
-            return fig
+    # Reactive UI updates based on state
+    @reactive.effect
+    def update_ui_state():
+        """Update UI elements based on app state"""
+        state = app_state.get()
         
-        return create_empty_plot("Modelo no ajustado")
-    
-    @render.plot
-    def acf_plot():
-        """Render ACF plot"""
-        if model_fitted():
-            # Mock ACF
-            lags = range(1, 21)
-            acf_values = [0.8, 0.6, 0.4, 0.2, 0.1] + [0.05] * 15
-            fig = px.bar(
-                x=lags,
-                y=acf_values,
-                title="ACF de Residuos"
-            )
-            fig.add_hline(y=0.2, line_dash="dash", line_color="red")
-            fig.add_hline(y=-0.2, line_dash="dash", line_color="red")
-            fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                xaxis_title="Lag",
-                yaxis_title="ACF"
-            )
-            return fig
+        # Update step indicators
+        if state["data_loaded"]:
+            # Show data preview elements
+            pass
         
-        return create_empty_plot("Modelo no ajustado")
-    
-    @render.plot
-    def qq_plot():
-        """Render Q-Q plot"""
-        if model_fitted():
-            # Mock Q-Q plot
-            residuals = np.random.normal(0, 1, 100)
-            fig = px.scatter(
-                x=np.sort(residuals),
-                y=np.sort(np.random.normal(0, 1, 100)),
-                title="Q-Q Plot"
-            )
-            fig.add_trace(go.Scatter(
-                x=[-3, 3],
-                y=[-3, 3],
-                mode='lines',
-                name='Línea de referencia',
-                line=dict(dash='dash', color='red')
-            ))
-            fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                xaxis_title="Cuantiles Teóricos",
-                yaxis_title="Cuantiles Muestrales"
-            )
-            return fig
-        
-        return create_empty_plot("Modelo no ajustado")
-    
-    @render.plot
-    def histogram_plot():
-        """Render residuals histogram"""
-        if model_fitted():
-            # Mock histogram
-            residuals = np.random.normal(0, 1, 100)
-            fig = px.histogram(
-                x=residuals,
-                title="Histograma de Residuos",
-                nbins=20
-            )
-            fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                xaxis_title="Residuos",
-                yaxis_title="Frecuencia"
-            )
-            return fig
-        
-        return create_empty_plot("Modelo no ajustado")
-    
-    # ============================================================================
-    # OUTPUT RENDERERS - Forecasting
-    # ============================================================================
-    
-    @render.plot
-    def forecast_plot():
-        """Render forecast plot"""
-        if model_fitted():
-            data = current_data()
-            if data is not None:
-                # Mock forecast
-                last_date = data['date'].iloc[-1]
-                forecast_dates = pd.date_range(
-                    last_date + pd.Timedelta(days=1),
-                    periods=input.forecast_steps(),
-                    freq='M' if 'M' in str(data['date'].dtype) else 'D'
-                )
-                
-                # Mock forecast values
-                last_value = data.iloc[-1, 1]
-                forecast_values = [last_value + i * 10 + np.random.normal(0, 5) for i in range(input.forecast_steps())]
-                upper_bound = [val + 20 for val in forecast_values]
-                lower_bound = [val - 20 for val in forecast_values]
-                
-                fig = go.Figure()
-                
-                # Historical data
-                fig.add_trace(go.Scatter(
-                    x=data['date'],
-                    y=data.iloc[:, 1],
-                    mode='lines',
-                    name='Datos Históricos',
-                    line=dict(color='blue')
-                ))
-                
-                # Forecast
-                fig.add_trace(go.Scatter(
-                    x=forecast_dates,
-                    y=forecast_values,
-                    mode='lines',
-                    name='Predicción',
-                    line=dict(color='red', dash='dash')
-                ))
-                
-                # Confidence interval
-                fig.add_trace(go.Scatter(
-                    x=forecast_dates,
-                    y=upper_bound,
-                    mode='lines',
-                    line=dict(width=0),
-                    showlegend=False
-                ))
-                
-                fig.add_trace(go.Scatter(
-                    x=forecast_dates,
-                    y=lower_bound,
-                    mode='lines',
-                    line=dict(width=0),
-                    fill='tonexty',
-                    fillcolor='rgba(255,0,0,0.2)',
-                    name='Intervalo de Confianza 95%'
-                ))
-                
-                fig.update_layout(
-                    title="Predicción con Intervalos de Confianza",
-                    plot_bgcolor='white',
-                    paper_bgcolor='white',
-                    xaxis_title="Fecha",
-                    yaxis_title="Valor"
-                )
-                
-                return fig
-        
-        return create_empty_plot("Modelo no ajustado")
-    
-    @render.data_frame
-    def forecast_table():
-        """Render forecast table"""
-        if model_fitted():
-            # Mock forecast table
-            steps = input.forecast_steps()
-            forecast_data = pd.DataFrame({
-                'Período': range(1, steps + 1),
-                'Predicción': [100 + i * 5 + np.random.normal(0, 2) for i in range(steps)],
-                'Límite Inferior': [95 + i * 5 for i in range(steps)],
-                'Límite Superior': [105 + i * 5 for i in range(steps)]
-            })
-            return forecast_data
-        return pd.DataFrame({"Mensaje": ["Modelo no ajustado"]})
+        if state["analysis_complete"]:
+            # Show results elements
+            pass
 
-
-def create_empty_plot(message="No hay datos"):
-    """Create empty plot with message"""
-    fig = go.Figure()
-    fig.add_annotation(
-        text=message,
-        xref="paper", yref="paper",
-        x=0.5, y=0.5, showarrow=False,
-        font=dict(size=16, color="gray")
-    )
-    fig.update_layout(
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=False)
-    )
-    return fig
-
-
-# Create and run the app
+# Create the Shiny app
 app = App(app_ui, server)
 
+# Run the app
 if __name__ == "__main__":
-    print("🚀 Starting TSLib Shiny App...")
-    print("📊 Open your browser to: http://localhost:8000")
     app.run(host="0.0.0.0", port=8000)
