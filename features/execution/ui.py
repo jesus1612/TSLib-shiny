@@ -16,12 +16,12 @@ def render_execution_ui() -> ui.Tag:
                 class_="d-flex gap-2 mb-3"
             ),
             ui.div(
-                ui.div("Estado: Listo para ejecutar", id="execution_status", class_="status-indicator status-info"),
-                ui.div("Tiempo estimado: 2-5 minutos", id="estimated_time", class_="text-muted"),
+                ui.div("Estado: Listo para ejecutar", id="execution_status", class_="status-indicator status-info execution-status"),
+                ui.div("Tiempo estimado: 2-5 minutos", id="estimated_time", class_="estimated-time"),
                 class_="mt-2"
             ),
             ui.div(
-                ui.tags.div("Progreso:"),
+                ui.tags.h4("Progreso:"),
                 ui.div(
                     ui.div("Preparando...", class_="progress-step"),
                     ui.div("Ajustando modelos...", class_="progress-step"),

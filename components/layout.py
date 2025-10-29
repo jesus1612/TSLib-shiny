@@ -115,20 +115,24 @@ def create_file_upload_area(
     accept: str = ".csv,.xlsx,.xls",
     multiple: bool = False
 ) -> ui.Tag:
-    """Create a file upload area"""
+    """Create a file upload area with hidden input and custom drag & drop area"""
     
     return ui.div(
-        ui.input_file(
-            input_id,
-            label,
-            accept=accept,
-            multiple=multiple
+        ui.div(
+            ui.input_file(
+                input_id,
+                label,
+                accept=accept,
+                multiple=multiple
+            ),
+            class_="file-input-hidden"
         ),
         ui.div(
             ui.div("📁", class_="file-upload-icon"),
             ui.div("Arrastra y suelta tu archivo aquí", class_="file-upload-text"),
             ui.div("o haz clic para seleccionar", class_="file-upload-hint"),
-            class_="file-upload-area"
+            class_="file-upload-area",
+            onclick=f"document.getElementById('{input_id}').click()"
         ),
         class_="file-upload-wrapper"
     )

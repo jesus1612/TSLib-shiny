@@ -356,6 +356,25 @@ app_ui = ui.page_fluid(
               color: var(--text-secondary) !important;
             }
             
+            /* Ensure all text elements are visible */
+            h1, h2, h3, h4, h5, h6 {
+              color: var(--text-primary) !important;
+            }
+            
+            p, div, span {
+              color: var(--text-primary) !important;
+            }
+            
+            /* Specific styling for execution step */
+            .execution-status, .estimated-time, .progress-step {
+              color: var(--text-secondary) !important;
+            }
+            
+            /* Data preview styling */
+            #data_preview_placeholder {
+              color: var(--text-secondary) !important;
+            }
+            
             /* Input styling */
             input[type="number"], input[type="text"], input[type="email"], input[type="password"], 
             select, textarea {
@@ -479,6 +498,59 @@ app_ui = ui.page_fluid(
               transform: translateY(-1px);
               box-shadow: var(--shadow-md);
             }
+            
+            /* File upload styling */
+            .file-input-hidden {
+              display: none !important;
+            }
+            
+            .file-upload-wrapper {
+              position: relative;
+            }
+            
+            .file-upload-area {
+              border: 2px dashed var(--border-color);
+              border-radius: var(--radius-lg);
+              padding: var(--spacing-2xl);
+              text-align: center;
+              background-color: var(--bg-tertiary);
+              transition: all 0.2s ease;
+              cursor: pointer;
+              position: relative;
+            }
+            
+            .file-upload-area:hover {
+              border-color: var(--accent-primary);
+              background-color: var(--bg-hover);
+            }
+            
+            .file-upload-area:active {
+              transform: scale(0.98);
+            }
+            </style>
+            <script>
+            // Handle custom messages from server
+            Shiny.addCustomMessageHandler("update_preview", function(message) {
+              // Hide placeholder and show content
+              const placeholder = document.getElementById("data_preview_placeholder");
+              const content = document.getElementById("data_preview_content");
+              
+              if (placeholder && content) {
+                placeholder.style.display = "none";
+                content.classList.remove("d-none");
+                content.classList.add("d-block");
+                
+                // Update file info
+                const rowCount = document.getElementById("row_count");
+                const colCount = document.getElementById("col_count");
+                const fileSize = document.getElementById("file_size");
+                
+                if (rowCount) rowCount.textContent = "Filas: " + message.rows;
+                if (colCount) colCount.textContent = "Columnas: " + message.columns;
+                if (fileSize) fileSize.textContent = "Tamaño: " + message.size;
+              }
+            });
+            </script>
             """
         )
     ),
@@ -629,6 +701,14 @@ def server(input, output, session):
                 "columns": 2
             }
             app_state.set(new_state)
+            
+            # Update preview elements via JavaScript
+            session.send_custom_message("update_preview", {
+                "filename": input.file_upload()[0]["name"],
+                "size": f"{input.file_upload()[0]['size'] / 1024:.1f} KB",
+                "rows": "1000",
+                "columns": "2"
+            })
     
     # Model execution handler
     @reactive.effect

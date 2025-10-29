@@ -23,8 +23,20 @@ def render_upload_ui() -> ui.Tag:
             ui.div(
                 ui.tags.h4("Vista Previa:"),
                 ui.div(
-                    ui.tags.p("No hay datos cargados", class_="text-muted text-center"),
-                    id="data_preview_placeholder"
+                    ui.tags.p("No hay datos cargados", class_="text-muted text-center", id="data_preview_placeholder"),
+                    ui.div(
+                        ui.tags.h5("Primeras 10 filas:"),
+                        ui.div("Datos cargados aquí...", id="data_table"),
+                        ui.tags.h5("Información del dataset:"),
+                        ui.div(
+                            ui.tags.p("Filas: 0", id="row_count"),
+                            ui.tags.p("Columnas: 0", id="col_count"),
+                            ui.tags.p("Tamaño: 0 KB", id="file_size"),
+                        ),
+                        id="data_preview_content",
+                        class_="d-none"
+                    ),
+                    id="data_preview_container"
                 ),
                 class_="mt-3"
             )
