@@ -500,14 +500,14 @@ body {
   overflow: auto;
 }
 
-.table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
   color: var(--text-primary);
   background-color: var(--bg-tertiary);
 }
 
-.table thead th {
+.data-table thead th {
   position: sticky;
   top: 0;
   background-color: var(--bg-secondary);
@@ -518,18 +518,18 @@ body {
   white-space: nowrap;
 }
 
-.table tbody td {
+.data-table tbody td {
   padding: var(--spacing-sm);
   border-bottom: 1px solid var(--border-color);
   color: var(--text-secondary);
   white-space: nowrap;
 }
 
-.table tbody tr:nth-child(odd) {
+.data-table tbody tr:nth-child(odd) {
   background-color: var(--bg-card);
 }
 
-.table tbody tr:hover {
+.data-table tbody tr:hover {
   background-color: var(--bg-hover);
 }
 

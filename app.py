@@ -618,6 +618,7 @@ def server(input, output, session):
     def stepper_navigation():
         """Render stepper navigation reactively"""
         current_step = app_state.get()["current_step"]
+        print(current_step)
         return ui.div(
             ui.div(
                 ui.input_action_button(
@@ -630,9 +631,9 @@ def server(input, output, session):
             ui.div(
                 ui.input_action_button(
                     "next_step",
-                    "Siguiente →" if current_step < len(STEPS) - 1 else "Finalizar",
+                    "Siguiente →",
                     class_="btn btn-primary"
-                ),
+                ) if current_step < len(STEPS) - 1 else ui.div(),
                 class_="d-flex"
             ),
             class_="stepper-navigation"

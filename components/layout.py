@@ -104,7 +104,7 @@ def create_data_table(data: list, headers: list = None) -> ui.Tag:
         ui.tags.table(
             ui.tags.thead(table_header),
             ui.tags.tbody(*table_rows),
-            class_="table"
+            class_="data-table"
         ),
         class_="table-container"
     )
