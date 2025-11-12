@@ -1,14 +1,22 @@
 # Main Shiny application for TSLib Time Series Analysis
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend for Shiny
+
 from shiny import App, ui, reactive, render
 from components.stepper import StepperComponent
-from components.layout import create_app_layout, create_data_table
+from components.layout import create_app_layout, create_data_table, create_metric_card, create_form_group
 from features.upload.ui import render_upload_ui
 from features.visualization.ui import render_visualization_ui
 from features.model_selection.ui import render_model_selection_ui
 from features.execution.ui import render_execution_ui
 from features.results.ui import render_results_ui
 from features.reports.ui import render_reports_ui
+
+# Import TSLib service
+from services.tslib_service import TSLibService
 
 # Define the steps for the wizard
 STEPS = [
@@ -586,12 +594,22 @@ def server(input, output, session):
     app_state = reactive.Value({
         "current_step": 0,
         "data_loaded": False,
-        "analysis_complete": False,
+        "data_validated": False,
         "uploaded_data": None,
-        "selected_model": None,
-        "results": None
+        "value_column": None,
+        "date_column": None,
+        "model_type": "ARIMA",
+        "model_config": {},
+        "fitted_model": None,
+        "forecast_results": None,
+        "analysis_complete": False,
+        "execution_log": [],
+        "exploratory_analysis": None
     })
     uploaded_dataframe = reactive.Value(None)
+    
+    # Initialize TSLib service
+    tslib_service = TSLibService()
     
     # Stepper header renderer
     @render.ui
@@ -693,6 +711,402 @@ def server(input, output, session):
             class_="data-preview-content"
         )
     
+    @render.ui
+    def column_selection_ui():
+        """Render column selection UI after data is loaded"""
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        
+        if df is None:
+            return ui.div()
+        
+        # Get numeric columns
+        numeric_cols = tslib_service.get_numeric_columns(df)
+        
+        if not numeric_cols:
+            return ui.div(
+                ui.tags.p("⚠️ No se encontraron columnas numéricas en el archivo", class_="text-warning"),
+                class_="mt-3"
+            )
+        
+        # Detect datetime column
+        datetime_col = tslib_service.detect_datetime_column(df)
+        all_cols = list(df.columns)
+        
+        return ui.div(
+            ui.tags.h5("Configuración de Columnas:", class_="mt-4"),
+            ui.div(
+                ui.div(
+                    create_form_group(
+                        label="Columna de Valores (Serie Temporal)",
+                        control=ui.input_select(
+                            "value_column",
+                            "",
+                            choices=numeric_cols,
+                            selected=numeric_cols[0] if numeric_cols else None
+                        ),
+                        help_text="Selecciona la columna con los valores de la serie temporal"
+                    ),
+                    class_="col-md-6"
+                ),
+                ui.div(
+                    create_form_group(
+                        label="Columna de Fecha/Tiempo (Opcional)",
+                        control=ui.input_select(
+                            "date_column",
+                            "",
+                            choices=["(Ninguna)"] + all_cols,
+                            selected=datetime_col if datetime_col else "(Ninguna)"
+                        ),
+                        help_text="Columna para el eje X en gráficos"
+                    ),
+                    class_="col-md-6"
+                ),
+                class_="row"
+            ),
+            ui.div(
+                ui.input_action_button("validate_data", "✓ Validar Datos", class_="btn btn-primary"),
+                class_="mt-3"
+            ),
+            ui.output_ui("validation_results_ui"),
+            class_="mt-3"
+        )
+    
+    @render.ui
+    def validation_results_ui():
+        """Show validation results"""
+        state = app_state.get()
+        if not state.get("data_validated"):
+            return ui.div()
+        
+        # Get validation report from state (should be set by validate_data handler)
+        validation = state.get("validation_report", {})
+        
+        if not validation:
+            return ui.div()
+        
+        messages = validation.get("messages", [])
+        warnings = validation.get("warnings", [])
+        is_valid = validation.get("valid", False)
+        
+        result_class = "status-success" if is_valid else "status-warning"
+        
+        return ui.div(
+            ui.div(
+                ui.tags.h6("Resultados de Validación:"),
+                *[ui.div(msg, class_=f"status-indicator {result_class}") for msg in messages],
+                *[ui.div(f"⚠️ {warn}", class_="status-indicator status-warning") for warn in warnings],
+                class_="mt-3"
+            )
+        )
+    
+    # Visualization renders
+    @render.plot
+    def time_series_plot():
+        """Render time series plot"""
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        value_col = state.get("value_column")
+        date_col = state.get("date_column")
+        
+        if df is None or value_col is None:
+            # Return empty plot
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.text(0.5, 0.5, 'Carga datos primero', ha='center', va='center')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            return fig
+        
+        # Convert to numeric if needed
+        if pd.api.types.is_numeric_dtype(df[value_col]):
+            y_values = df[value_col]
+        else:
+            y_values = tslib_service.convert_to_numeric(df, value_col)
+        
+        fig, ax = plt.subplots(figsize=(10, 4))
+        
+        if date_col and date_col != "(Ninguna)" and date_col in df.columns:
+            x = pd.to_datetime(df[date_col], errors='coerce')
+            ax.plot(x, y_values, linewidth=1.5, color='#00d4aa')
+            ax.set_xlabel('Fecha')
+        else:
+            ax.plot(y_values, linewidth=1.5, color='#00d4aa')
+            ax.set_xlabel('Índice')
+        
+        ax.set_ylabel(value_col)
+        ax.set_title('Serie Temporal', fontsize=12, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor('#2d2d2d')
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        plt.tight_layout()
+        return fig
+    
+    @render.ui
+    def statistics_cards():
+        """Render statistics cards"""
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        value_col = state.get("value_column")
+        
+        if df is None or value_col is None:
+            return ui.div(
+                ui.tags.p("Selecciona una columna de valores primero", class_="text-muted"),
+            )
+        
+        # Convert to numeric if needed
+        if pd.api.types.is_numeric_dtype(df[value_col]):
+            data = df[value_col].values
+        else:
+            data = tslib_service.convert_to_numeric(df, value_col).values
+        
+        stats = tslib_service.calculate_basic_stats(data)
+        
+        return ui.div(
+            create_metric_card(f"{stats['mean']:.2f}", "Media", "📊"),
+            create_metric_card(f"{stats['std']:.2f}", "Desv. Estándar", "📏"),
+            create_metric_card(f"{stats['min']:.2f}", "Mínimo", "⬇️"),
+            create_metric_card(f"{stats['max']:.2f}", "Máximo", "⬆️"),
+            class_="metrics-grid"
+        )
+    
+    @render.plot
+    def acf_plot():
+        """Render ACF plot"""
+        state = app_state.get()
+        analysis = state.get("exploratory_analysis")
+        
+        if analysis is None:
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'Valida los datos primero', ha='center', va='center', color='white')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        acf_values = analysis.get("acf", [])
+        
+        # Check if ACF values are empty or invalid
+        if not acf_values or len(acf_values) == 0:
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'ACF no disponible\n(puede requerir más datos)', 
+                   ha='center', va='center', color='white')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        fig, ax = plt.subplots(figsize=(6, 3))
+        
+        # Get data length from state for confidence intervals
+        df = uploaded_dataframe.get()
+        value_col = state.get("value_column")
+        n_obs = len(df[value_col]) if df is not None and value_col else 100
+        
+        ax.stem(range(len(acf_values)), acf_values, linefmt='#00d4aa', markerfmt='o', basefmt=' ')
+        ax.axhline(y=0, color='white', linestyle='-', linewidth=0.5)
+        
+        # Add confidence intervals if we have enough data
+        if n_obs > 0:
+            conf_level = 1.96 / np.sqrt(n_obs)
+            ax.axhline(y=conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
+            ax.axhline(y=-conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
+        
+        ax.set_xlabel('Lag')
+        ax.set_ylabel('ACF')
+        ax.set_title('Autocorrelación (ACF)', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor('#2d2d2d')
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        plt.tight_layout()
+        return fig
+    
+    @render.plot
+    def pacf_plot():
+        """Render PACF plot"""
+        state = app_state.get()
+        analysis = state.get("exploratory_analysis")
+        
+        if analysis is None:
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'Valida los datos primero', ha='center', va='center', color='white')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        pacf_values = analysis.get("pacf", [])
+        
+        # Check if PACF values are empty or invalid
+        if not pacf_values or len(pacf_values) == 0:
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'PACF no disponible\n(puede requerir más datos)', 
+                   ha='center', va='center', color='white')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        fig, ax = plt.subplots(figsize=(6, 3))
+        
+        # Get data length from state for confidence intervals
+        df = uploaded_dataframe.get()
+        value_col = state.get("value_column")
+        n_obs = len(df[value_col]) if df is not None and value_col else 100
+        
+        ax.stem(range(len(pacf_values)), pacf_values, linefmt='#0099cc', markerfmt='o', basefmt=' ')
+        ax.axhline(y=0, color='white', linestyle='-', linewidth=0.5)
+        
+        # Add confidence intervals if we have enough data
+        if n_obs > 0:
+            conf_level = 1.96 / np.sqrt(n_obs)
+            ax.axhline(y=conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
+            ax.axhline(y=-conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
+        
+        ax.set_xlabel('Lag')
+        ax.set_ylabel('PACF')
+        ax.set_title('Autocorrelación Parcial (PACF)', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor('#2d2d2d')
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        plt.tight_layout()
+        return fig
+    
+    # Model selection renders
+    @render.ui
+    def model_description():
+        """Show model description based on selection"""
+        model_type = input.model_type() if hasattr(input, 'model_type') else "ARIMA"
+        
+        descriptions = {
+            "AR": "Modelo Autoregresivo: El valor actual depende de valores pasados. Útil para series con persistencia.",
+            "MA": "Media Móvil: El valor actual depende de errores pasados. Útil para modelar shocks transitorios.",
+            "ARMA": "Combinación AR + MA: Para series estacionarias con estructura compleja.",
+            "ARIMA": "ARMA Integrado: Incluye diferenciación para series no estacionarias con tendencia."
+        }
+        
+        return ui.div(
+            ui.tags.p(descriptions.get(model_type, ""), class_="text-muted"),
+            class_="mt-2"
+        )
+    
+    @render.ui
+    def manual_parameters_ui():
+        """Show manual parameter inputs based on model type and auto_select"""
+        auto_select = input.auto_select() if hasattr(input, 'auto_select') else True
+        
+        if auto_select:
+            return ui.div(
+                ui.tags.p("Los parámetros se seleccionarán automáticamente", class_="text-muted"),
+                class_="mb-3"
+            )
+        
+        model_type = input.model_type() if hasattr(input, 'model_type') else "ARIMA"
+        
+        if model_type == "AR":
+            return ui.div(
+                create_form_group(
+                    label="Orden AR (p)",
+                    control=ui.input_numeric("p_order", "", value=1, min=0, max=10),
+                    help_text="Número de términos autorregresivos"
+                ),
+                class_="mb-3"
+            )
+        elif model_type == "MA":
+            return ui.div(
+                create_form_group(
+                    label="Orden MA (q)",
+                    control=ui.input_numeric("q_order", "", value=1, min=0, max=10),
+                    help_text="Número de términos de media móvil"
+                ),
+                class_="mb-3"
+            )
+        elif model_type == "ARMA":
+            return ui.div(
+                ui.div(
+                    create_form_group(
+                        label="Orden AR (p)",
+                        control=ui.input_numeric("p_order", "", value=1, min=0, max=10),
+                        help_text="Términos autorregresivos"
+                    ),
+                    class_="col-md-6"
+                ),
+                ui.div(
+                    create_form_group(
+                        label="Orden MA (q)",
+                        control=ui.input_numeric("q_order", "", value=1, min=0, max=10),
+                        help_text="Términos de media móvil"
+                    ),
+                    class_="col-md-6"
+                ),
+                class_="row mb-3"
+            )
+        elif model_type == "ARIMA":
+            return ui.div(
+                ui.div(
+                    create_form_group(
+                        label="Orden AR (p)",
+                        control=ui.input_numeric("p_order", "", value=1, min=0, max=10),
+                        help_text="Términos autorregresivos"
+                    ),
+                    class_="col-md-4"
+                ),
+                ui.div(
+                    create_form_group(
+                        label="Diferenciación (d)",
+                        control=ui.input_numeric("d_order", "", value=1, min=0, max=3),
+                        help_text="Orden de diferenciación"
+                    ),
+                    class_="col-md-4"
+                ),
+                ui.div(
+                    create_form_group(
+                        label="Orden MA (q)",
+                        control=ui.input_numeric("q_order", "", value=1, min=0, max=10),
+                        help_text="Términos de media móvil"
+                    ),
+                    class_="col-md-4"
+                ),
+                class_="row mb-3"
+            )
+        
+        return ui.div()
+    
     # Navigation event handlers
     @reactive.effect
     @reactive.event(input.next_step)
@@ -721,6 +1135,331 @@ def server(input, output, session):
             new_state["current_step"] = current_step - 1
             app_state.set(new_state)
             stepper.current_step = current_step - 1
+    
+    # Execution renders
+    @render.ui
+    def execution_summary():
+        """Show execution configuration summary"""
+        state = app_state.get()
+        model_type = state.get("model_type", "ARIMA")
+        value_col = state.get("value_column", "N/A")
+        auto_select = input.auto_select() if hasattr(input, 'auto_select') else True
+        
+        return ui.div(
+            ui.tags.p(f"Modelo: {model_type}"),
+            ui.tags.p(f"Columna de datos: {value_col}"),
+            ui.tags.p(f"Auto-selección: {'Sí' if auto_select else 'No'}"),
+            class_="text-muted"
+        )
+    
+    @render.ui
+    def execution_status_ui():
+        """Show execution status"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            return ui.div()
+        
+        return ui.div(
+            ui.div("✓ Análisis completado exitosamente", class_="status-indicator status-success"),
+            class_="mt-3"
+        )
+    
+    @render.ui
+    def execution_log():
+        """Show execution log"""
+        state = app_state.get()
+        log_entries = state.get("execution_log", [])
+        
+        if not log_entries:
+            return ui.div(
+                ui.tags.p("El log aparecerá cuando inicies el análisis", class_="text-muted")
+            )
+        
+        return ui.div(
+            *[ui.div(f"• {entry}", class_="progress-step") for entry in log_entries],
+            class_="progress-list"
+        )
+    
+    # Results renders
+    @render.ui
+    def model_info_ui():
+        """Show model information"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            return ui.div(
+                ui.tags.p("Ejecuta el análisis primero", class_="text-muted")
+            )
+        
+        model_type = state.get("model_type", "N/A")
+        fitted_model = state.get("fitted_model")
+        
+        if fitted_model and hasattr(fitted_model, 'order'):
+            order = fitted_model.order
+            if isinstance(order, tuple):
+                order_str = f"{order}"
+            else:
+                order_str = f"({order})"
+        else:
+            order_str = "N/A"
+        
+        return ui.div(
+            ui.tags.p(f"Tipo de Modelo: {model_type}"),
+            ui.tags.p(f"Orden: {order_str}"),
+            class_="text-muted"
+        )
+    
+    @render.ui
+    def metrics_cards():
+        """Render metrics cards"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            return ui.div(
+                ui.tags.p("Las métricas aparecerán después de ejecutar el análisis", class_="text-muted")
+            )
+        
+        fitted_model = state.get("fitted_model")
+        if not fitted_model:
+            return ui.div(ui.tags.p("No hay métricas disponibles", class_="text-muted"))
+        
+        metrics = tslib_service.get_model_metrics(fitted_model)
+        
+        return ui.div(
+            create_metric_card(
+                f"{metrics.get('aic', 0):.2f}" if metrics.get('aic') else "N/A",
+                "AIC",
+                "📊"
+            ),
+            create_metric_card(
+                f"{metrics.get('bic', 0):.2f}" if metrics.get('bic') else "N/A",
+                "BIC",
+                "📊"
+            ),
+            create_metric_card(
+                metrics.get('order', 'N/A'),
+                "Orden",
+                "⚙️"
+            ),
+            class_="metrics-grid"
+        )
+    
+    @render.plot
+    def forecast_plot():
+        """Render forecast plot"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.text(0.5, 0.5, 'Ejecuta el análisis primero', ha='center', va='center')
+            ax.axis('off')
+            return fig
+        
+        df = uploaded_dataframe.get()
+        value_col = state.get("value_column")
+        forecast_results = state.get("forecast_results")
+        
+        if not forecast_results or df is None:
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.text(0.5, 0.5, 'No hay pronóstico disponible', ha='center', va='center')
+            ax.axis('off')
+            return fig
+        
+        # Plot historical data + forecast
+        fig, ax = plt.subplots(figsize=(10, 4))
+        
+        # Convert to numeric if needed
+        if pd.api.types.is_numeric_dtype(df[value_col]):
+            historical = df[value_col].values
+        else:
+            historical = tslib_service.convert_to_numeric(df, value_col).values
+        forecast = forecast_results.get('forecast', [])
+        lower = forecast_results.get('lower_bound')
+        upper = forecast_results.get('upper_bound')
+        
+        n_hist = len(historical)
+        n_fore = len(forecast)
+        
+        # Plot historical
+        ax.plot(range(n_hist), historical, label='Histórico', color='#00d4aa', linewidth=1.5)
+        
+        # Plot forecast
+        forecast_x = range(n_hist, n_hist + n_fore)
+        ax.plot(forecast_x, forecast, label='Pronóstico', color='#0099cc', linewidth=1.5, linestyle='--')
+        
+        # Plot confidence intervals if available
+        if lower is not None and upper is not None:
+            ax.fill_between(forecast_x, lower, upper, alpha=0.3, color='#0099cc', label='IC 95%')
+        
+        ax.set_xlabel('Tiempo')
+        ax.set_ylabel('Valor')
+        ax.set_title('Pronóstico de Serie Temporal', fontsize=12, fontweight='bold')
+        ax.legend(loc='best', facecolor='#2d2d2d', edgecolor='white', labelcolor='white')
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor('#2d2d2d')
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        plt.tight_layout()
+        return fig
+    
+    @render.ui
+    def forecast_table_ui():
+        """Render forecast table"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            return ui.div(ui.tags.p("Ejecuta el análisis primero", class_="text-muted"))
+        
+        forecast_results = state.get("forecast_results")
+        if not forecast_results:
+            return ui.div(ui.tags.p("No hay pronóstico disponible", class_="text-muted"))
+        
+        forecast = forecast_results.get('forecast', [])
+        lower = forecast_results.get('lower_bound')
+        upper = forecast_results.get('upper_bound')
+        
+        # Create table data
+        table_data = []
+        for i, val in enumerate(forecast, 1):
+            row = [f"t+{i}", f"{val:.4f}"]
+            if lower is not None and upper is not None:
+                row.extend([f"{lower[i-1]:.4f}", f"{upper[i-1]:.4f}"])
+            table_data.append(row)
+        
+        headers = ["Paso", "Pronóstico"]
+        if lower is not None:
+            headers.extend(["Límite Inferior", "Límite Superior"])
+        
+        return create_data_table(table_data, headers=headers)
+    
+    @render.plot
+    def residuals_plot():
+        """Render residuals plot"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'Ejecuta el análisis primero', ha='center', va='center')
+            ax.axis('off')
+            return fig
+        
+        fitted_model = state.get("fitted_model")
+        if not fitted_model or not hasattr(fitted_model, 'get_residuals'):
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'No hay residuos disponibles', ha='center', va='center')
+            ax.axis('off')
+            return fig
+        
+        residuals = fitted_model.get_residuals()
+        
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.plot(residuals, color='#00d4aa', linewidth=1, alpha=0.8)
+        ax.axhline(y=0, color='red', linestyle='--', linewidth=1)
+        ax.set_xlabel('Tiempo')
+        ax.set_ylabel('Residuos')
+        ax.set_title('Residuos del Modelo', fontsize=10, fontweight='bold')
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor('#2d2d2d')
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+        
+        plt.tight_layout()
+        return fig
+    
+    @render.plot
+    def residuals_acf_plot():
+        """Render residuals ACF plot"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'Ejecuta el análisis primero', ha='center', va='center', color='white')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        fitted_model = state.get("fitted_model")
+        if not fitted_model or not hasattr(fitted_model, 'get_residuals'):
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, 'No hay residuos disponibles', ha='center', va='center', color='white')
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        residuals = fitted_model.get_residuals()
+        
+        # Calculate ACF of residuals
+        try:
+            from tslib.core.acf_pacf import ACFCalculator
+            acf_calc = ACFCalculator()
+            
+            # Try with nlags parameter first, fallback to default
+            try:
+                acf_values = acf_calc.calculate(residuals, nlags=min(20, len(residuals) // 2))
+            except TypeError:
+                acf_values = acf_calc.calculate(residuals)
+                if isinstance(acf_values, (list, np.ndarray)) and len(acf_values) > 20:
+                    acf_values = acf_values[:20]
+            
+            # Check if we got valid values
+            if not acf_values or len(acf_values) == 0:
+                fig, ax = plt.subplots(figsize=(6, 3))
+                ax.text(0.5, 0.5, 'ACF no disponible', ha='center', va='center', color='white')
+                ax.set_xlim(0, 1)
+                ax.set_ylim(0, 1)
+                ax.axis('off')
+                ax.set_facecolor('#2d2d2d')
+                fig.patch.set_facecolor('#1a1a1a')
+                return fig
+            
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.stem(range(len(acf_values)), acf_values, linefmt='#00d4aa', markerfmt='o', basefmt=' ')
+            ax.axhline(y=0, color='white', linestyle='-', linewidth=0.5)
+            
+            # Add confidence intervals if we have residuals
+            if len(residuals) > 0:
+                conf_level = 1.96 / np.sqrt(len(residuals))
+                ax.axhline(y=conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
+                ax.axhline(y=-conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
+            
+            ax.set_xlabel('Lag')
+            ax.set_ylabel('ACF')
+            ax.set_title('ACF de Residuos', fontsize=10, fontweight='bold')
+            ax.grid(True, alpha=0.3)
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            ax.tick_params(colors='white')
+            ax.xaxis.label.set_color('white')
+            ax.yaxis.label.set_color('white')
+            ax.title.set_color('white')
+            ax.spines['bottom'].set_color('white')
+            ax.spines['left'].set_color('white')
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            
+            plt.tight_layout()
+            return fig
+        except Exception as e:
+            fig, ax = plt.subplots(figsize=(6, 3))
+            ax.text(0.5, 0.5, f'Error al calcular ACF:\n{str(e)}', 
+                   ha='center', va='center', color='white', fontsize=9)
+            ax.set_xlim(0, 1)
+            ax.set_ylim(0, 1)
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
     
     # File upload handler
     @reactive.effect
@@ -773,22 +1512,259 @@ def server(input, output, session):
         }
         app_state.set(new_state)
     
+    # Column selection handler
+    @reactive.effect
+    @reactive.event(input.value_column)
+    def handle_value_column_change():
+        """Handle value column selection"""
+        if not hasattr(input, 'value_column'):
+            return
+        
+        value_col = input.value_column()
+        new_state = app_state.get().copy()
+        new_state["value_column"] = value_col
+        new_state["data_validated"] = False  # Reset validation
+        app_state.set(new_state)
+    
+    @reactive.effect
+    @reactive.event(input.date_column)
+    def handle_date_column_change():
+        """Handle date column selection"""
+        if not hasattr(input, 'date_column'):
+            return
+        
+        date_col = input.date_column()
+        new_state = app_state.get().copy()
+        new_state["date_column"] = date_col if date_col != "(Ninguna)" else None
+        app_state.set(new_state)
+    
+    # Data validation handler
+    @reactive.effect
+    @reactive.event(input.validate_data)
+    def handle_validate_data():
+        """Handle data validation"""
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        value_col = state.get("value_column")
+        
+        if df is None or value_col is None:
+            ui.notification_show(
+                "Selecciona una columna de valores primero",
+                type="warning",
+                duration=3
+            )
+            return
+        
+        try:
+            # Validate data using TSLib (handles conversion internally)
+            validation_result = tslib_service.validate_data(df, value_col)
+            
+            # Get exploratory analysis (ACF/PACF)
+            # Convert to numeric if needed
+            if pd.api.types.is_numeric_dtype(df[value_col]):
+                data = df[value_col].values
+            else:
+                data = tslib_service.convert_to_numeric(df, value_col).values
+            
+            exploratory = tslib_service.get_exploratory_analysis(data)
+            
+            # Update state
+            new_state = state.copy()
+            new_state["data_validated"] = validation_result["valid"]
+            new_state["validation_report"] = validation_result
+            new_state["exploratory_analysis"] = exploratory
+            app_state.set(new_state)
+            
+            # Show notification
+            if validation_result["valid"]:
+                ui.notification_show(
+                    "✓ Datos validados correctamente",
+                    type="message",
+                    duration=3
+                )
+            else:
+                ui.notification_show(
+                    "⚠️ Datos requieren atención, revisa los warnings",
+                    type="warning",
+                    duration=5
+                )
+        except Exception as e:
+            ui.notification_show(
+                f"Error en validación: {str(e)}",
+                type="error",
+                duration=5
+            )
+    
+    # Model type change handler
+    @reactive.effect
+    @reactive.event(input.model_type)
+    def handle_model_type_change():
+        """Handle model type selection change"""
+        if not hasattr(input, 'model_type'):
+            return
+        
+        model_type = input.model_type()
+        new_state = app_state.get().copy()
+        new_state["model_type"] = model_type
+        app_state.set(new_state)
+    
     # Model execution handler
     @reactive.effect
     @reactive.event(input.start_execution)
     def handle_start_execution():
         """Handle model execution start"""
-        # Simulate analysis execution
-        new_state = app_state.get()
-        new_state["analysis_complete"] = True
-        new_state["selected_model"] = "ARIMA(1,1,1)"
-        new_state["results"] = {
-            "aic": 1234.56,
-            "bic": 1256.78,
-            "rmse": 15.23,
-            "mae": 12.45
-        }
-        app_state.set(new_state)
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        value_col = state.get("value_column")
+        model_type = state.get("model_type", "ARIMA")
+        
+        if df is None or value_col is None:
+            ui.notification_show(
+                "No hay datos cargados",
+                type="error",
+                duration=3
+            )
+            return
+        
+        if not state.get("data_validated"):
+            ui.notification_show(
+                "Valida los datos primero",
+                type="warning",
+                duration=3
+            )
+            return
+        
+        try:
+            # Get data and convert to numeric if needed
+            if pd.api.types.is_numeric_dtype(df[value_col]):
+                data = df[value_col].values
+            else:
+                data = tslib_service.convert_to_numeric(df, value_col).values
+            
+            # Get model parameters
+            auto_select = input.auto_select() if hasattr(input, 'auto_select') else True
+            forecast_steps = input.forecast_steps() if hasattr(input, 'forecast_steps') else 10
+            include_conf = input.include_confidence() if hasattr(input, 'include_confidence') else True
+            
+            # Determine order based on model type and auto_select
+            if auto_select:
+                order = None  # Will be auto-selected
+            else:
+                if model_type == "AR":
+                    p = input.p_order() if hasattr(input, 'p_order') else 1
+                    order = (p,)
+                elif model_type == "MA":
+                    q = input.q_order() if hasattr(input, 'q_order') else 1
+                    order = (q,)
+                elif model_type == "ARMA":
+                    p = input.p_order() if hasattr(input, 'p_order') else 1
+                    q = input.q_order() if hasattr(input, 'q_order') else 1
+                    order = (p, q)
+                elif model_type == "ARIMA":
+                    p = input.p_order() if hasattr(input, 'p_order') else 1
+                    d = input.d_order() if hasattr(input, 'd_order') else 1
+                    q = input.q_order() if hasattr(input, 'q_order') else 1
+                    order = (p, d, q)
+            
+            # Update log
+            new_state = state.copy()
+            new_state["execution_log"] = [
+                "Iniciando análisis...",
+                f"Modelo seleccionado: {model_type}",
+                "Ajustando modelo..."
+            ]
+            app_state.set(new_state)
+            
+            # Fit model
+            fitted_model = tslib_service.fit_model(
+                data=data,
+                model_type=model_type,
+                order=order if order else (1,) if model_type in ["AR", "MA"] else (1, 1) if model_type == "ARMA" else (1, 1, 1),
+                auto_select=auto_select
+            )
+            
+            # Update log
+            new_state = app_state.get().copy()
+            new_state["execution_log"].append("Generando pronóstico...")
+            app_state.set(new_state)
+            
+            # Generate forecast
+            forecast_results = tslib_service.get_forecast(
+                model=fitted_model,
+                steps=forecast_steps,
+                return_conf_int=include_conf
+            )
+            
+            # Update state with results
+            new_state = app_state.get().copy()
+            new_state["fitted_model"] = fitted_model
+            new_state["forecast_results"] = forecast_results
+            new_state["analysis_complete"] = True
+            new_state["execution_log"].append("✓ Análisis completado")
+            app_state.set(new_state)
+            
+            ui.notification_show(
+                "✓ Análisis completado exitosamente",
+                type="message",
+                duration=3
+            )
+            
+        except Exception as e:
+            new_state = app_state.get().copy()
+            new_state["execution_log"].append(f"✗ Error: {str(e)}")
+            app_state.set(new_state)
+            
+            ui.notification_show(
+                f"Error en ejecución: {str(e)}",
+                type="error",
+                duration=5
+            )
+    
+    # Export results handler
+    @reactive.effect
+    @reactive.event(input.export_results)
+    def handle_export_results():
+        """Handle results export"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            ui.notification_show(
+                "No hay resultados para exportar",
+                type="warning",
+                duration=3
+            )
+            return
+        
+        forecast_results = state.get("forecast_results")
+        if forecast_results:
+            # Create DataFrame with forecast results
+            forecast = forecast_results.get('forecast', [])
+            lower = forecast_results.get('lower_bound')
+            upper = forecast_results.get('upper_bound')
+            
+            export_data = {
+                'Step': [f"t+{i}" for i in range(1, len(forecast) + 1)],
+                'Forecast': forecast
+            }
+            
+            if lower is not None and upper is not None:
+                export_data['Lower_Bound'] = lower
+                export_data['Upper_Bound'] = upper
+            
+            df_export = pd.DataFrame(export_data)
+            
+            # Note: In a real Shiny app, you would use ui.download_button
+            # For now, just show a notification
+            ui.notification_show(
+                "Funcionalidad de exportación preparada (requiere configuración adicional)",
+                type="message",
+                duration=3
+            )
+        else:
+            ui.notification_show(
+                "No hay pronóstico para exportar",
+                type="warning",
+                duration=3
+            )
     
     # Report generation handler
     @reactive.effect
@@ -805,17 +1781,27 @@ def server(input, output, session):
     def validate_current_step(step: int, state: dict) -> bool:
         """Validate if current step can proceed to next"""
         if step == 0:  # Upload step
-            return state["data_loaded"] and uploaded_dataframe.get() is not None
+            # Require data loaded, column selected, and validated
+            return (state.get("data_loaded", False) and 
+                    state.get("value_column") is not None and 
+                    state.get("data_validated", False))
         elif step == 1:  # Visualization step
-            return state["data_loaded"]
+            # Require validated data
+            return state.get("data_validated", False)
         elif step == 2:  # Model selection step
-            return state["data_loaded"]
+            # Require validated data and model type selected
+            return (state.get("data_validated", False) and 
+                    state.get("model_type") is not None)
         elif step == 3:  # Execution step
-            return state["data_loaded"]
+            # Require model configured
+            return (state.get("data_validated", False) and 
+                    state.get("model_type") is not None)
         elif step == 4:  # Results step
-            return state["analysis_complete"]
+            # Require analysis complete
+            return state.get("analysis_complete", False)
         elif step == 5:  # Reports step
-            return state["analysis_complete"]
+            # Require analysis complete
+            return state.get("analysis_complete", False)
         return True
     
     # Reactive UI updates based on state

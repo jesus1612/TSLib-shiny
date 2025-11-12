@@ -27,6 +27,8 @@ def render_upload_ui() -> ui.Tag:
                     id="data_preview_container"
                 ),
                 class_="mt-3"
-            )
+            ),
+            # Column selection section
+            ui.output_ui("column_selection_ui")
         )
     )

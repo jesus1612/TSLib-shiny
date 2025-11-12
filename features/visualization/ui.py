@@ -10,34 +10,32 @@ def render_visualization_ui() -> ui.Tag:
         title="📊 Visualización de Serie Temporal",
         subtitle="Gráfico interactivo y estadísticas básicas",
         content=ui.div(
+            # Time series plot
             ui.div(
-                ui.div("📊", class_="file-upload-icon"),
-                ui.div("El gráfico se generará después de cargar los datos", class_="file-upload-text"),
-                class_="file-upload-area"
+                ui.output_plot("time_series_plot", height="400px"),
+                class_="mb-4"
             ),
+            # Statistics cards
             ui.div(
-                ui.div(
-                    ui.input_action_button("refresh_plot", "🔄 Actualizar Gráfico", class_="btn btn-secondary"),
-                    ui.input_action_button("zoom_in", "🔍 Zoom In", class_="btn btn-secondary"),
-                    ui.input_action_button("zoom_out", "🔍 Zoom Out", class_="btn btn-secondary"),
-                    class_="d-flex gap-2 mb-3"
-                ),
-                # ui.div(
-                #     ui.div("Gráfico de serie temporal", id="time_series_plot"),
-                #     class_="plot-container"
-                # ),
-                # class_="mt-3"
-            ),
-            ui.div(
-                ui.tags.h4("Estadísticas básicas:"),
-                ui.div(
-                    create_metric_card("0", "Media", "📊"),
-                    create_metric_card("0", "Desv. Estándar", "📏"),
-                    create_metric_card("0", "Mínimo", "⬇️"),
-                    create_metric_card("0", "Máximo", "⬆️"),
-                    class_="metrics-grid"
-                ),
+                ui.tags.h4("Estadísticas Básicas:"),
+                ui.output_ui("statistics_cards"),
                 class_="mt-3"
+            ),
+            # ACF/PACF plots (optional)
+            ui.div(
+                ui.tags.h4("Análisis de Correlación:"),
+                ui.div(
+                    ui.div(
+                        ui.output_plot("acf_plot", height="300px"),
+                        class_="col-md-6"
+                    ),
+                    ui.div(
+                        ui.output_plot("pacf_plot", height="300px"),
+                        class_="col-md-6"
+                    ),
+                    class_="row"
+                ),
+                class_="mt-4"
             )
         )
     )
