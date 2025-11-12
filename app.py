@@ -1,7 +1,8 @@
 # Main Shiny application for TSLib Time Series Analysis
+import pandas as pd
 from shiny import App, ui, reactive, render
 from components.stepper import StepperComponent
-from components.layout import create_app_layout
+from components.layout import create_app_layout, create_data_table
 from features.upload.ui import render_upload_ui
 from features.visualization.ui import render_visualization_ui
 from features.model_selection.ui import render_model_selection_ui
@@ -85,7 +86,7 @@ app_ui = ui.page_fluid(
               --radius-lg: 0.75rem;
               --radius-xl: 1rem;
             }
-            
+
             body {
               font-family: var(--font-family);
               background-color: var(--bg-primary);
@@ -165,6 +166,9 @@ app_ui = ui.page_fluid(
               margin-top: var(--spacing-xl);
               padding-top: var(--spacing-lg);
               border-top: 1px solid var(--border-color);
+              padding-bottom: var(--spacing-sm);
+              padding-left: var(--spacing-md);
+              padding-right: var(--spacing-md);
             }
             
             .btn {
@@ -563,17 +567,15 @@ app_ui = ui.page_fluid(
     
     
     # Stepper header output
-    ui.output_ui("stepper_header"),
-    
+    # ui.output_ui("stepper_header"),
+    # Stepper navigation output
+    ui.output_ui("stepper_navigation"),
     # Main content area
     ui.div(
         # Step content will be rendered here
         ui.output_ui("step_content"),
         class_="container-fluid"
-    ),
-    
-    # Stepper navigation output
-    ui.output_ui("stepper_navigation")
+    )
 )
 
 # Define the server logic
@@ -589,6 +591,7 @@ def server(input, output, session):
         "selected_model": None,
         "results": None
     })
+    uploaded_dataframe = reactive.Value(None)
     
     # Stepper header renderer
     @render.ui
@@ -656,6 +659,39 @@ def server(input, output, session):
         else:
             return ui.div("Paso no válido", class_="alert alert-danger")
     
+    @render.ui
+    def data_preview_ui():
+        """Render data preview after upload"""
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        
+        if df is None:
+            return ui.div(
+                ui.tags.p("No hay datos cargados", class_="text-muted text-center"),
+                class_="data-preview-empty"
+            )
+        
+        preview_df = df.head(10)
+        table = create_data_table(
+            preview_df.to_numpy().tolist(),
+            headers=list(preview_df.columns)
+        )
+        file_info = state.get("uploaded_data") or {}
+        file_size_kb = None
+        if file_info and file_info.get("size") is not None:
+            file_size_kb = f"{file_info['size'] / 1024:.1f} KB"
+        
+        return ui.div(
+            ui.tags.h5("Información del dataset:"),
+            ui.tags.p(f"Archivo: {file_info.get('filename', 'N/A')}"),
+            ui.tags.p(f"Filas: {file_info.get('rows', '0')}"),
+            ui.tags.p(f"Columnas: {file_info.get('columns', '0')}"),
+            ui.tags.p(f"Tamaño: {file_size_kb or '0 KB'}"),
+            ui.tags.h5("Primeras 10 filas:"),
+            table,
+            class_="data-preview-content"
+        )
+    
     # Navigation event handlers
     @reactive.effect
     @reactive.event(input.next_step)
@@ -690,25 +726,51 @@ def server(input, output, session):
     @reactive.event(input.file_upload)
     def handle_file_upload():
         """Handle file upload"""
-        if input.file_upload() is not None:
-            # Simulate data loading
-            new_state = app_state.get()
-            new_state["data_loaded"] = True
-            new_state["uploaded_data"] = {
-                "filename": input.file_upload()[0]["name"],
-                "size": input.file_upload()[0]["size"],
-                "rows": 1000,  # Mock data
-                "columns": 2
-            }
+        file_info = input.file_upload()
+        if not file_info:
+            uploaded_dataframe.set(None)
+            new_state = app_state.get().copy()
+            new_state["data_loaded"] = False
+            new_state["uploaded_data"] = None
             app_state.set(new_state)
-            
-            # Update preview elements via JavaScript
-            session.send_custom_message("update_preview", {
-                "filename": input.file_upload()[0]["name"],
-                "size": f"{input.file_upload()[0]['size'] / 1024:.1f} KB",
-                "rows": "1000",
-                "columns": "2"
-            })
+            return
+        
+        file_metadata = file_info[0]
+        temp_path = file_metadata.get("datapath")
+        file_name = file_metadata.get("name", "dataset")
+        file_size = file_metadata.get("size")
+        
+        try:
+            if file_name.lower().endswith(".csv"):
+                df = pd.read_csv(temp_path)
+            elif file_name.lower().endswith((".xlsx", ".xls")):
+                df = pd.read_excel(temp_path)
+            else:
+                raise ValueError("Formato de archivo no soportado")
+        except Exception as exc:
+            uploaded_dataframe.set(None)
+            new_state = app_state.get().copy()
+            new_state["data_loaded"] = False
+            new_state["uploaded_data"] = None
+            app_state.set(new_state)
+            ui.notification_show(
+                f"No fue posible cargar el archivo: {exc}",
+                type="error",
+                duration=5
+            )
+            return
+        
+        uploaded_dataframe.set(df)
+        
+        new_state = app_state.get().copy()
+        new_state["data_loaded"] = not df.empty
+        new_state["uploaded_data"] = {
+            "filename": file_name,
+            "size": file_size,
+            "rows": int(df.shape[0]),
+            "columns": int(df.shape[1])
+        }
+        app_state.set(new_state)
     
     # Model execution handler
     @reactive.effect
@@ -742,7 +804,7 @@ def server(input, output, session):
     def validate_current_step(step: int, state: dict) -> bool:
         """Validate if current step can proceed to next"""
         if step == 0:  # Upload step
-            return state["data_loaded"]
+            return state["data_loaded"] and uploaded_dataframe.get() is not None
         elif step == 1:  # Visualization step
             return state["data_loaded"]
         elif step == 2:  # Model selection step

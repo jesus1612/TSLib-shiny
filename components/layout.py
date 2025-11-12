@@ -88,22 +88,22 @@ def create_data_table(data: list, headers: list = None) -> ui.Tag:
     if headers is None:
         headers = [f"Columna {i+1}" for i in range(len(data[0]) if data else 0)]
     
-    table_header = ui.tr(
-        *[ui.th(header) for header in headers]
+    table_header = ui.tags.tr(
+        *[ui.tags.th(header) for header in headers]
     )
     
     table_rows = []
     for row in data:
         table_rows.append(
-            ui.tr(
-                *[ui.td(str(cell)) for cell in row]
+            ui.tags.tr(
+                *[ui.tags.td(str(cell)) for cell in row]
             )
         )
     
     return ui.div(
-        ui.table(
-            ui.thead(table_header),
-            ui.tbody(*table_rows),
+        ui.tags.table(
+            ui.tags.thead(table_header),
+            ui.tags.tbody(*table_rows),
             class_="table"
         ),
         class_="table-container"

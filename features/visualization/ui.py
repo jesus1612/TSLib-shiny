@@ -22,11 +22,11 @@ def render_visualization_ui() -> ui.Tag:
                     ui.input_action_button("zoom_out", "🔍 Zoom Out", class_="btn btn-secondary"),
                     class_="d-flex gap-2 mb-3"
                 ),
-                ui.div(
-                    ui.div("Gráfico de serie temporal", id="time_series_plot"),
-                    class_="plot-container"
-                ),
-                class_="mt-3"
+                # ui.div(
+                #     ui.div("Gráfico de serie temporal", id="time_series_plot"),
+                #     class_="plot-container"
+                # ),
+                # class_="mt-3"
             ),
             ui.div(
                 ui.tags.h4("Estadísticas básicas:"),

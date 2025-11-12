@@ -46,8 +46,8 @@ run:
 		echo "💡 Solución: Ejecuta 'make clean && make install' para recrear el entorno."; \
 		exit 1; \
 	fi
-	@echo "✅ Ejecutando aplicación con entorno virtual..."
-	. venv/bin/activate && python app.py
+	@echo "✅ Ejecutando aplicación con entorno virtual (hot reload activado)..."
+	. venv/bin/activate && shiny run --reload --host 0.0.0.0 --port 8000 app:app
 
 # Clean cache and temporary files
 clean:
