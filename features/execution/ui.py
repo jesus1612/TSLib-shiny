@@ -22,11 +22,5 @@ def render_execution_ui() -> ui.Tag:
             ),
             # Status and progress
             ui.output_ui("execution_status_ui"),
-            # Progress log
-            ui.div(
-                ui.tags.h5("Log de Ejecución:"),
-                ui.output_ui("execution_log"),
-                class_="mt-4"
-            )
         )
     )

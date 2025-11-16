@@ -14,7 +14,6 @@ def render_model_selection_ui() -> ui.Tag:
                 ui.tags.h5("Tipo de modelo:"),
                 ui.output_ui("model_type_select"),
                 ui.output_ui("model_description"),
-                ui.output_ui("model_select_debug"),
                 class_="mb-4"
             ),
             # Auto-selection switch
@@ -43,11 +42,7 @@ def render_model_selection_ui() -> ui.Tag:
                 ui.div(
                     ui.input_action_button("start_execution", "▶️ Ajustar y pronosticar", class_="btn btn-primary btn-lg"),
                     class_="my-3 text-center"
-                ),
-                ui.output_ui("execution_status_ui"),
-                ui.tags.h5("Log de ejecución:"),
-                ui.output_ui("execution_log"),
-                class_="mt-4"
+                )
             )
         )
     )

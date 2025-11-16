@@ -11,6 +11,8 @@ def render_upload_ui() -> ui.Tag:
         subtitle="Sube tu archivo CSV o Excel",
         content=ui.div(
             ui.output_ui("upload_area_ui"),
+            # Move column selection above preview
+            ui.output_ui("column_selection_ui"),
             ui.div(
                 ui.tags.h5("Vista Prevía"),
                 ui.div(
@@ -19,7 +21,6 @@ def render_upload_ui() -> ui.Tag:
                 ),
                 class_="mt-3"
             ),
-            # Column selection section
-            ui.output_ui("column_selection_ui")
+            
         )
     )

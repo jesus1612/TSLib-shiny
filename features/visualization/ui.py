@@ -35,6 +35,7 @@ def render_visualization_ui() -> ui.Tag:
                     ),
                     class_="row"
                 ),
+                ui.output_ui("acf_pacf_debug"),
                 class_="mt-4"
             )
         )

@@ -765,15 +765,6 @@ app_ui = ui.page_fluid(
                 if (fileSize) fileSize.textContent = "Tamaño: " + message.size;
               }
             });
-            
-            // Debug: log model_type changes in browser console
-            document.addEventListener("change", function(e) {
-              const t = e.target;
-              if (t && t.id === "model_type") {
-                // eslint-disable-next-line no-console
-                console.log("[DEBUG] model_type changed to:", t.value);
-              }
-            });
             </script>
             """
         )
@@ -1034,7 +1025,7 @@ def server(input, output, session):
             ui.div(
                 ui.div(
                     create_form_group(
-                        label="Columna de Fecha/Tiempo (Opcional)",
+                        label="Columna de Fecha/Tiempo",
                         control=ui.input_select(
                             "date_column",
                             "",
@@ -1181,6 +1172,7 @@ def server(input, output, session):
         analysis = state.get("exploratory_analysis")
         
         if analysis is None:
+            print("[DEBUG] ACF: exploratory_analysis is None")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'Valida los datos primero', ha='center', va='center', color='white')
             ax.set_xlim(0, 1)
@@ -1194,6 +1186,14 @@ def server(input, output, session):
         
         # Check if ACF values are empty or invalid
         if not acf_values or len(acf_values) == 0:
+            # Log data length if available
+            try:
+                df = uploaded_dataframe.get()
+                value_col = state.get("value_column")
+                n_obs_dbg = len(df[value_col]) if df is not None and value_col else 0
+            except Exception:
+                n_obs_dbg = -1
+            print(f"[DEBUG] ACF unavailable. len(acf)={len(acf_values) if acf_values is not None else 'None'}, n_obs={n_obs_dbg}")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'ACF no disponible\n(puede requerir más datos)', 
                    ha='center', va='center', color='white')
@@ -1245,6 +1245,7 @@ def server(input, output, session):
         analysis = state.get("exploratory_analysis")
         
         if analysis is None:
+            print("[DEBUG] PACF: exploratory_analysis is None")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'Valida los datos primero', ha='center', va='center', color='white')
             ax.set_xlim(0, 1)
@@ -1258,6 +1259,13 @@ def server(input, output, session):
         
         # Check if PACF values are empty or invalid
         if not pacf_values or len(pacf_values) == 0:
+            try:
+                df = uploaded_dataframe.get()
+                value_col = state.get("value_column")
+                n_obs_dbg = len(df[value_col]) if df is not None and value_col else 0
+            except Exception:
+                n_obs_dbg = -1
+            print(f"[DEBUG] PACF unavailable. len(pacf)={len(pacf_values) if pacf_values is not None else 'None'}, n_obs={n_obs_dbg}")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'PACF no disponible\n(puede requerir más datos)', 
                    ha='center', va='center', color='white')
@@ -1301,6 +1309,39 @@ def server(input, output, session):
         
         plt.tight_layout()
         return fig
+    
+    @render.ui
+    def acf_pacf_debug():
+        """Small debug readout for ACF/PACF availability"""
+        state = app_state.get()
+        analysis = state.get("exploratory_analysis")
+        df = uploaded_dataframe.get()
+        value_col = state.get("value_column")
+        try:
+            if df is not None and value_col:
+                # Try to get numeric and count NaNs
+                series_raw = df[value_col]
+                if pd.api.types.is_numeric_dtype(series_raw):
+                    series_num = series_raw
+                else:
+                    series_num = tslib_service.convert_to_numeric(df, value_col)
+                n_obs = len(series_num)
+                nan_count = int(series_num.isna().sum())
+            else:
+                n_obs = 0
+                nan_count = 0
+        except Exception:
+            n_obs = -1
+            nan_count = -1
+        if analysis is None:
+            return ui.div(ui.tags.small(f"[DEBUG] Correlación: sin análisis. n_obs={n_obs}, NaNs={nan_count}", class_="text-muted"))
+        acf_vals = analysis.get("acf", [])
+        pacf_vals = analysis.get("pacf", [])
+        acf_len = len(acf_vals) if acf_vals is not None else 0
+        pacf_len = len(pacf_vals) if pacf_vals is not None else 0
+        return ui.div(
+            ui.tags.small(f"[DEBUG] Correlación: n_obs={n_obs}, NaNs={nan_count}, len(ACF)={acf_len}, len(PACF)={pacf_len}", class_="text-muted")
+        )
     
     # Model selection renders
     @render.ui
@@ -1463,18 +1504,7 @@ def server(input, output, session):
             class_="text-muted"
         )
     
-    @render.ui
-    def model_select_debug():
-        """Small debug readout for model selection"""
-        in_val = None
-        try:
-            in_val = input.model_type() if hasattr(input, 'model_type') else None
-        except Exception:
-            in_val = "(error)"
-        st_val = app_state.get().get("model_type", None)
-        return ui.div(
-            ui.tags.small(f"[DEBUG] input.model_type={in_val} | state.model_type={st_val}", class_="text-muted")
-        )
+    # (debug UI removed)
     
     @render.ui
     def execution_status_ui():
@@ -1581,6 +1611,7 @@ def server(input, output, session):
         forecast_results = state.get("forecast_results")
         
         if not forecast_results or df is None:
+            print(f"[DEBUG] forecast_plot: missing data. df_none={df is None}, forecast_none={forecast_results is None}")
             fig, ax = plt.subplots(figsize=(10, 4))
             ax.text(0.5, 0.5, 'No hay pronóstico disponible', ha='center', va='center')
             ax.axis('off')
@@ -1738,6 +1769,7 @@ def server(input, output, session):
             
             # Check if we got valid values
             if not acf_values or len(acf_values) == 0:
+                print(f"[DEBUG] Residuals ACF unavailable. len(residuals)={len(residuals)} len(acf)={len(acf_values) if acf_values is not None else 'None'}")
                 fig, ax = plt.subplots(figsize=(6, 3))
                 ax.text(0.5, 0.5, 'ACF no disponible', ha='center', va='center', color='white')
                 ax.set_xlim(0, 1)
@@ -1916,25 +1948,20 @@ def server(input, output, session):
         
         try:
             model_type = input.model_type()
-            print(f"[DEBUG] handle_model_type_change -> received: {model_type}")
             # Normalize empty selection to None
             if model_type is not None and model_type not in ["", "__none__"]:
                 new_state = app_state.get().copy()
                 new_state["model_type"] = model_type
                 app_state.set(new_state)
-                print(f"[DEBUG] handle_model_type_change -> state.model_type set to: {model_type}")
-                ui.notification_show(f"Modelo seleccionado: {model_type}", type="message", duration=1.5)
             else:
                 # Clear model_type if user selects placeholder
                 new_state = app_state.get().copy()
                 new_state["model_type"] = None
                 app_state.set(new_state)
-                print("[DEBUG] handle_model_type_change -> cleared state.model_type (placeholder selected)")
         except Exception as e:
             # If there's an error getting the value, don't update state
-            print(f"Error getting model_type: {e}")
             pass
-    
+
     # Model execution handler
     @reactive.effect
     @reactive.event(input.start_execution)
