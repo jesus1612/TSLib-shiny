@@ -7,7 +7,7 @@ matplotlib.use('Agg')  # Use non-interactive backend for Shiny
 
 from shiny import App, ui, reactive, render
 from components.stepper import StepperComponent
-from components.layout import create_app_layout, create_data_table, create_metric_card, create_form_group
+from components.layout import create_app_layout, create_data_table, create_metric_card, create_form_group, create_file_upload_area
 from features.upload.ui import render_upload_ui
 from features.visualization.ui import render_visualization_ui
 from features.model_selection.ui import render_model_selection_ui
@@ -418,18 +418,33 @@ app_ui = ui.page_fluid(
               color: var(--text-primary) !important;
             }
             
+            /* Data preview card wrapper for better spacing */
+            .table-preview {
+              background-color: var(--bg-secondary);
+              border: 1px solid var(--border-color);
+              border-radius: var(--radius-lg);
+              padding: var(--spacing-md);
+              margin-top: var(--spacing-sm);
+              box-shadow: var(--shadow-sm);
+              overflow: auto;
+            }
+            
             table th,
             table td,
             .data-table th,
             .data-table td {
               color: var(--text-primary) !important;
               border-color: var(--border-color) !important;
+              padding: 12px 16px; /* add comfortable cell padding */
             }
             
             table thead th,
             .data-table thead th {
               background-color: var(--bg-secondary) !important;
               color: var(--text-primary) !important;
+              position: sticky; /* keep header visible when scrolling */
+              top: 0;
+              z-index: 1;
             }
             
             table tbody td,
@@ -440,6 +455,16 @@ app_ui = ui.page_fluid(
             table tbody tr:hover td,
             .data-table tbody tr:hover td {
               color: var(--text-primary) !important;
+            }
+            
+            /* Subtle row separators */
+            table tbody tr,
+            .data-table tbody tr {
+              border-bottom: 1px solid var(--border-color);
+            }
+            table tbody tr:last-child,
+            .data-table tbody tr:last-child {
+              border-bottom: none;
             }
             
             /* Shiny specific table elements */
@@ -740,6 +765,15 @@ app_ui = ui.page_fluid(
                 if (fileSize) fileSize.textContent = "Tamaño: " + message.size;
               }
             });
+            
+            // Debug: log model_type changes in browser console
+            document.addEventListener("change", function(e) {
+              const t = e.target;
+              if (t && t.id === "model_type") {
+                // eslint-disable-next-line no-console
+                console.log("[DEBUG] model_type changed to:", t.value);
+              }
+            });
             </script>
             """
         )
@@ -878,6 +912,49 @@ def server(input, output, session):
             return ui.div("Paso no válido", class_="alert alert-danger")
     
     @render.ui
+    def model_type_select():
+        """Render model type select with state hydration to avoid resets"""
+        state = app_state.get()
+        current = state.get("model_type")
+        # If input already has a value (during same session), prefer it
+        try:
+            current_input = input.model_type() if hasattr(input, 'model_type') else None
+        except Exception:
+            current_input = None
+        selected_value = current_input or current or "__none__"
+        return ui.input_select(
+            "model_type",
+            "",
+            choices={
+                "__none__": "— Selecciona un modelo —",
+                "AR": "AR - Autoregresivo",
+                "MA": "MA - Media Móvil",
+                "ARMA": "ARMA - Combinado",
+                "ARIMA": "ARIMA - Integrado"
+            },
+            selected=selected_value
+        )
+    
+    @render.ui
+    def upload_area_ui():
+        """Render upload area only when no data is loaded"""
+        state = app_state.get()
+        if state.get("data_loaded"):
+            return ui.div()
+        
+        return ui.div(
+            create_file_upload_area(
+                input_id="file_upload",
+                label="Seleccionar archivo",
+                accept=".csv,.xlsx,.xls"
+            ),
+            ui.div(
+                ui.tags.p("Formatos soportados CSV, Excel (.xlsx, .xls)", class_="text-muted"),
+                class_="mt-2"
+            )
+        )
+    
+    @render.ui
     def data_preview_ui():
         """Render data preview after upload"""
         df = uploaded_dataframe.get()
@@ -900,11 +977,33 @@ def server(input, output, session):
             file_size_kb = f"{file_info['size'] / 1024:.1f} KB"
         
         return ui.div(
-            ui.tags.p(f"Archivo: {file_info.get('filename', 'N/A')}"),
-            ui.tags.p(f"Filas: {file_info.get('rows', '0')}"),
-            ui.tags.p(f"Columnas: {file_info.get('columns', '0')}"),
-            ui.tags.h5("Primeras 10 filas"),
-            table,
+            ui.div(
+                # Summary cards aligned at the same level
+                create_metric_card(
+                    f"{file_info.get('rows', '0')}", 
+                    "Filas", 
+                    "🧾"
+                ),
+                create_metric_card(
+                    f"{file_info.get('columns', '0')}", 
+                    "Columnas", 
+                    "📊"
+                ),
+                create_metric_card(
+                    f"{file_size_kb if file_size_kb else '—'}", 
+                    "Tamaño", 
+                    "💾"
+                ),
+                class_="metrics-grid"
+            ),
+            ui.div(
+                ui.tags.h5("Vista previa de datos"),
+                class_="mt-2"
+            ),
+            ui.div(
+                table,
+                class_="table-preview"
+            ),
             class_="data-preview-content"
         )
     
@@ -931,21 +1030,8 @@ def server(input, output, session):
         all_cols = list(df.columns)
         
         return ui.div(
-            ui.tags.h5("Configuración de Columnas:", class_="mt-4"),
+            ui.tags.h5("Configuración de columnas:", class_="mt-4"),
             ui.div(
-                ui.div(
-                    create_form_group(
-                        label="Columna de Valores (Serie Temporal)",
-                        control=ui.input_select(
-                            "value_column",
-                            "",
-                            choices=numeric_cols,
-                            selected=numeric_cols[0] if numeric_cols else None
-                        ),
-                        help_text="Selecciona la columna con los valores de la serie temporal"
-                    ),
-                    class_="col-md-6"
-                ),
                 ui.div(
                     create_form_group(
                         label="Columna de Fecha/Tiempo (Opcional)",
@@ -956,6 +1042,19 @@ def server(input, output, session):
                             selected=datetime_col if datetime_col else "(Ninguna)"
                         ),
                         help_text="Columna para el eje X en gráficos"
+                    ),
+                    class_="col-md-6"
+                ),
+                ui.div(
+                    create_form_group(
+                        label="Columna de Valores",
+                        control=ui.input_select(
+                            "value_column",
+                            "",
+                            choices=numeric_cols,
+                            selected=numeric_cols[0] if numeric_cols else None
+                        ),
+                        help_text="Selecciona la columna con los valores de la serie temporal"
                     ),
                     class_="col-md-6"
                 ),
@@ -990,7 +1089,6 @@ def server(input, output, session):
         
         return ui.div(
             ui.div(
-                ui.tags.h6("Resultados de Validación:"),
                 *[ui.div(msg, class_=f"status-indicator {result_class}") for msg in messages],
                 *[ui.div(f"⚠️ {warn}", class_="status-indicator status-warning") for warn in warnings],
                 class_="mt-3"
@@ -1363,6 +1461,19 @@ def server(input, output, session):
             ui.tags.p(f"Columna de datos: {value_col}"),
             ui.tags.p(f"Auto-selección: {'Sí' if auto_select else 'No'}"),
             class_="text-muted"
+        )
+    
+    @render.ui
+    def model_select_debug():
+        """Small debug readout for model selection"""
+        in_val = None
+        try:
+            in_val = input.model_type() if hasattr(input, 'model_type') else None
+        except Exception:
+            in_val = "(error)"
+        st_val = app_state.get().get("model_type", None)
+        return ui.div(
+            ui.tags.small(f"[DEBUG] input.model_type={in_val} | state.model_type={st_val}", class_="text-muted")
         )
     
     @render.ui
@@ -1787,20 +1898,7 @@ def server(input, output, session):
             new_state["validation_report"] = validation_result
             new_state["exploratory_analysis"] = exploratory
             app_state.set(new_state)
-            
-            # Show notification
-            if validation_result["valid"]:
-                ui.notification_show(
-                    "✓ Datos validados correctamente",
-                    type="message",
-                    duration=3
-                )
-            else:
-                ui.notification_show(
-                    "⚠️ Datos requieren atención, revisa los warnings",
-                    type="warning",
-                    duration=5
-                )
+
         except Exception as e:
             ui.notification_show(
                 f"Error en validación: {str(e)}",
@@ -1818,16 +1916,20 @@ def server(input, output, session):
         
         try:
             model_type = input.model_type()
+            print(f"[DEBUG] handle_model_type_change -> received: {model_type}")
             # Normalize empty selection to None
-            if model_type is not None and model_type != "":
+            if model_type is not None and model_type not in ["", "__none__"]:
                 new_state = app_state.get().copy()
                 new_state["model_type"] = model_type
                 app_state.set(new_state)
+                print(f"[DEBUG] handle_model_type_change -> state.model_type set to: {model_type}")
+                ui.notification_show(f"Modelo seleccionado: {model_type}", type="message", duration=1.5)
             else:
                 # Clear model_type if user selects placeholder
                 new_state = app_state.get().copy()
                 new_state["model_type"] = None
                 app_state.set(new_state)
+                print("[DEBUG] handle_model_type_change -> cleared state.model_type (placeholder selected)")
         except Exception as e:
             # If there's an error getting the value, don't update state
             print(f"Error getting model_type: {e}")

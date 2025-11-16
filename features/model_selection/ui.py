@@ -12,19 +12,9 @@ def render_model_selection_ui() -> ui.Tag:
             # Model type selector
             ui.div(
                 ui.tags.h5("Tipo de modelo:"),
-                ui.input_select(
-                    "model_type",
-                    "",
-                    choices={
-                        "": "— Selecciona un modelo —",
-                        "AR": "AR - Autoregresivo",
-                        "MA": "MA - Media Móvil",
-                        "ARMA": "ARMA - Combinado",
-                        "ARIMA": "ARIMA - Integrado"
-                    },
-                    selected=""
-                ),
+                ui.output_ui("model_type_select"),
                 ui.output_ui("model_description"),
+                ui.output_ui("model_select_debug"),
                 class_="mb-4"
             ),
             # Auto-selection switch

@@ -10,18 +10,9 @@ def render_upload_ui() -> ui.Tag:
         title="📁 Carga de Datos",
         subtitle="Sube tu archivo CSV o Excel",
         content=ui.div(
-            create_file_upload_area(
-                input_id="file_upload",
-                label="Seleccionar archivo",
-                accept=".csv,.xlsx,.xls"
-            ),
+            ui.output_ui("upload_area_ui"),
             ui.div(
-                ui.tags.p("Formatos soportados: CSV, Excel (.xlsx, .xls)", class_="text-muted"),
-                ui.tags.p("Tamaño máximo: 50MB", class_="text-muted"),
-                class_="mt-2"
-            ),
-            ui.div(
-                ui.tags.h4("Vista Previa:"),
+                ui.tags.h5("Vista Prevía"),
                 ui.div(
                     ui.output_ui("data_preview_ui"),
                     id="data_preview_container"
