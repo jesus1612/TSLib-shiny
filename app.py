@@ -11,38 +11,28 @@ from components.layout import create_app_layout, create_data_table, create_metri
 from features.upload.ui import render_upload_ui
 from features.visualization.ui import render_visualization_ui
 from features.model_selection.ui import render_model_selection_ui
-from features.execution.ui import render_execution_ui
 from features.results.ui import render_results_ui
-from features.reports.ui import render_reports_ui
 
 # Import TSLib service
 from services.tslib_service import TSLibService
 
-# Define the steps for the wizard
+# Define the steps for the wizard (simplified to 4, sentence case)
 STEPS = [
     {
-        "title": "📁 Carga de Datos",
+        "title": "📁 Carga de datos",
         "description": "Sube y configura tu serie temporal"
     },
     {
-        "title": "📊 Visualización",
+        "title": "📊 Exploración",
         "description": "Explora y analiza los datos"
     },
     {
-        "title": "⚙️ Selección de Modelo",
-        "description": "Configura parámetros ARIMA"
-    },
-    {
-        "title": "🚀 Ejecución",
-        "description": "Ejecuta el análisis en el servidor"
+        "title": "⚙️ Modelo y ejecución",
+        "description": "Configura el modelo y ejecuta el análisis"
     },
     {
         "title": "📈 Resultados",
         "description": "Revisa métricas y predicciones"
-    },
-    {
-        "title": "📄 Reportes",
-        "description": "Genera y descarga reportes"
     }
 ]
 
@@ -199,7 +189,7 @@ app_ui = ui.page_fluid(
               color: var(--bg-primary);
             }
             
-            .btn-primary:hover {
+            .btn-primary:hover:not(:disabled) {
               background-color: #00b894;
               transform: translateY(-1px);
               box-shadow: var(--shadow-md);
@@ -211,9 +201,25 @@ app_ui = ui.page_fluid(
               border: 1px solid var(--border-color);
             }
             
-            .btn-secondary:hover {
+            .btn-secondary:hover:not(:disabled) {
               background-color: var(--bg-hover);
               border-color: var(--border-light);
+            }
+            
+            /* Disabled button styles */
+            .btn:disabled,
+            .btn.disabled {
+              opacity: 0.5;
+              cursor: not-allowed !important;
+              pointer-events: none;
+              transform: none !important;
+            }
+            
+            .btn:disabled:hover,
+            .btn.disabled:hover {
+              background-color: inherit;
+              transform: none;
+              box-shadow: none;
             }
             
             .card {
@@ -323,7 +329,27 @@ app_ui = ui.page_fluid(
             .text-left { text-align: left; }
             .text-right { text-align: right; }
             
-            .text-muted { color: var(--text-muted); }
+            .text-muted { 
+              color: var(--text-secondary) !important; 
+            }
+            
+            /* Ensure all paragraph text is visible */
+            p.text-muted {
+              color: var(--text-secondary) !important;
+            }
+            
+            /* Model description specific styling */
+            .model-description p.text-muted,
+            .mt-2 p.text-muted,
+            .mb-3 p.text-muted {
+              color: var(--text-secondary) !important;
+            }
+            
+            /* Override for regular paragraphs that should be primary */
+            .card-body p:not(.text-muted),
+            .card p:not(.text-muted) {
+              color: var(--text-primary) !important;
+            }
             
             .mt-1 { margin-top: var(--spacing-xs); }
             .mt-2 { margin-top: var(--spacing-sm); }
@@ -387,13 +413,93 @@ app_ui = ui.page_fluid(
               color: var(--text-secondary) !important;
             }
             
+            /* Table styling - ensure all text is visible */
+            table, .data-table {
+              color: var(--text-primary) !important;
+            }
+            
+            table th,
+            table td,
+            .data-table th,
+            .data-table td {
+              color: var(--text-primary) !important;
+              border-color: var(--border-color) !important;
+            }
+            
+            table thead th,
+            .data-table thead th {
+              background-color: var(--bg-secondary) !important;
+              color: var(--text-primary) !important;
+            }
+            
+            table tbody td,
+            .data-table tbody td {
+              color: var(--text-secondary) !important;
+            }
+            
+            table tbody tr:hover td,
+            .data-table tbody tr:hover td {
+              color: var(--text-primary) !important;
+            }
+            
+            /* Shiny specific table elements */
+            .shiny-table th,
+            .shiny-table td {
+              color: var(--text-primary) !important;
+            }
+            
+            /* Shiny radio buttons container */
+            .shiny-input-radiogroup label,
+            .shiny-input-radiogroup .shiny-options-group label {
+              color: var(--text-primary) !important;
+            }
+            
+            .shiny-input-radiogroup input[type="radio"] {
+              accent-color: var(--accent-primary);
+              margin-right: var(--spacing-xs);
+            }
+            
+            /* Shiny checkbox container */
+            .shiny-input-checkboxgroup label {
+              color: var(--text-primary) !important;
+            }
+            
+            .shiny-input-checkboxgroup input[type="checkbox"] {
+              accent-color: var(--accent-primary);
+              margin-right: var(--spacing-xs);
+            }
+            
+            /* Shiny select input */
+            .shiny-input-select select {
+              background-color: var(--bg-tertiary) !important;
+              color: var(--text-primary) !important;
+            }
+            
+            /* Shiny switch/checkbox input */
+            .shiny-input-container label {
+              color: var(--text-primary) !important;
+            }
+            
+            /* Ensure all Shiny output text is visible */
+            .shiny-text-output,
+            .shiny-html-output {
+              color: var(--text-primary) !important;
+            }
+            
+            /* Shiny notification styling */
+            .shiny-notification {
+              background-color: var(--bg-card) !important;
+              color: var(--text-primary) !important;
+              border: 1px solid var(--border-color) !important;
+            }
+            
             /* Input styling */
             input[type="number"], input[type="text"], input[type="email"], input[type="password"], 
             select, textarea {
               background-color: var(--bg-tertiary);
               border: 1px solid var(--border-color);
               border-radius: var(--radius-md);
-              color: var(--text-primary);
+              color: var(--text-primary) !important;
               padding: var(--spacing-sm) var(--spacing-md);
               font-size: var(--font-size-sm);
             }
@@ -405,10 +511,44 @@ app_ui = ui.page_fluid(
               box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.2);
             }
             
-            /* Switch styling */
+            /* Select dropdown styling */
+            select {
+              background-color: var(--bg-tertiary) !important;
+              color: var(--text-primary) !important;
+              background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23ffffff' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+              background-repeat: no-repeat;
+              background-position: right var(--spacing-sm) center;
+              padding-right: var(--spacing-xl);
+              appearance: none;
+              -webkit-appearance: none;
+              -moz-appearance: none;
+            }
+            
+            select option {
+              background-color: var(--bg-tertiary);
+              color: var(--text-primary);
+              padding: var(--spacing-sm);
+            }
+            
+            select option:checked {
+              background-color: var(--accent-primary);
+              color: var(--bg-primary);
+            }
+            
+            /* Radio buttons and checkboxes styling */
+            .form-check {
+              display: flex;
+              align-items: center;
+              margin-bottom: var(--spacing-sm);
+            }
+            
             .form-check-input {
               background-color: var(--bg-tertiary);
               border-color: var(--border-color);
+              width: 1.25em;
+              height: 1.25em;
+              margin-right: var(--spacing-sm);
+              cursor: pointer;
             }
             
             .form-check-input:checked {
@@ -416,9 +556,47 @@ app_ui = ui.page_fluid(
               border-color: var(--accent-primary);
             }
             
+            .form-check-input:focus {
+              outline: none;
+              box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.2);
+            }
+            
             .form-check-label {
-              color: var(--text-primary);
-              margin-left: var(--spacing-sm);
+              color: var(--text-primary) !important;
+              margin-left: 0;
+              cursor: pointer;
+              font-size: var(--font-size-sm);
+            }
+            
+            /* Radio buttons specific */
+            input[type="radio"] {
+              accent-color: var(--accent-primary);
+            }
+            
+            input[type="radio"]:checked {
+              background-color: var(--accent-primary);
+            }
+            
+            /* Checkboxes specific */
+            input[type="checkbox"] {
+              accent-color: var(--accent-primary);
+            }
+            
+            /* Switch styling */
+            .form-switch .form-check-input {
+              width: 2.5em;
+              height: 1.25em;
+              background-color: var(--bg-tertiary);
+              border-color: var(--border-color);
+            }
+            
+            .form-switch .form-check-input:checked {
+              background-color: var(--accent-primary);
+              border-color: var(--accent-primary);
+            }
+            
+            .form-switch .form-check-label {
+              color: var(--text-primary) !important;
             }
             
             /* Slider styling */
@@ -494,7 +672,7 @@ app_ui = ui.page_fluid(
               color: var(--bg-primary);
             }
             
-            .btn-warning:hover {
+            .btn-warning:hover:not(:disabled) {
               background-color: #e6c200;
               transform: translateY(-1px);
               box-shadow: var(--shadow-md);
@@ -505,7 +683,7 @@ app_ui = ui.page_fluid(
               color: var(--bg-primary);
             }
             
-            .btn-danger:hover {
+            .btn-danger:hover:not(:disabled) {
               background-color: #ff5252;
               transform: translateY(-1px);
               box-shadow: var(--shadow-md);
@@ -570,7 +748,7 @@ app_ui = ui.page_fluid(
     # Main app layout
     create_app_layout(
         title="TSLib - Análisis de Series de Tiempo",
-        subtitle="Pipeline completo para análisis avanzado con modelos ARIMA"
+        subtitle="Análisis avanzado con modelos de series temporales"
     ),
     
     
@@ -598,7 +776,7 @@ def server(input, output, session):
         "uploaded_data": None,
         "value_column": None,
         "date_column": None,
-        "model_type": "ARIMA",
+        "model_type": None,
         "model_config": {},
         "fitted_model": None,
         "forecast_results": None,
@@ -636,22 +814,46 @@ def server(input, output, session):
     def stepper_navigation():
         """Render stepper navigation reactively"""
         current_step = app_state.get()["current_step"]
-        print(current_step)
-        return ui.div(
-            ui.div(
-                ui.input_action_button(
-                    "prev_step",
-                    "← Anterior",
-                    class_="btn btn-secondary"
-                ) if current_step > 0 else ui.div(),
-                class_="d-flex"
-            ),
-            ui.div(
-                ui.input_action_button(
+        state = app_state.get()
+        
+        # Check if we can proceed to next step
+        can_proceed = validate_current_step(current_step, state)
+        
+        # Previous button
+        prev_button = None
+        if current_step > 0:
+            prev_button = ui.input_action_button(
+                "prev_step",
+                "← Anterior",
+                class_="btn btn-secondary"
+            )
+        
+        # Next button
+        next_button = None
+        if current_step < len(STEPS) - 1:
+            if can_proceed:
+                next_button = ui.input_action_button(
                     "next_step",
                     "Siguiente →",
                     class_="btn btn-primary"
-                ) if current_step < len(STEPS) - 1 else ui.div(),
+                )
+            else:
+                # Disabled button - use HTML button with disabled attribute
+                next_button = ui.tags.button(
+                    "Siguiente →",
+                    type="button",
+                    class_="btn btn-primary",
+                    disabled=True,
+                    title="Completa los requisitos del paso actual para continuar"
+                )
+        
+        return ui.div(
+            ui.div(
+                prev_button if prev_button else ui.div(),
+                class_="d-flex"
+            ),
+            ui.div(
+                next_button if next_button else ui.div(),
                 class_="d-flex"
             ),
             class_="stepper-navigation"
@@ -668,13 +870,10 @@ def server(input, output, session):
         elif current_step == 1:
             return render_visualization_ui()
         elif current_step == 2:
+            # Model selection now includes execution controls
             return render_model_selection_ui()
         elif current_step == 3:
-            return render_execution_ui()
-        elif current_step == 4:
             return render_results_ui()
-        elif current_step == 5:
-            return render_reports_ui()
         else:
             return ui.div("Paso no válido", class_="alert alert-danger")
     
@@ -701,12 +900,10 @@ def server(input, output, session):
             file_size_kb = f"{file_info['size'] / 1024:.1f} KB"
         
         return ui.div(
-            ui.tags.h5("Información del dataset:"),
             ui.tags.p(f"Archivo: {file_info.get('filename', 'N/A')}"),
             ui.tags.p(f"Filas: {file_info.get('rows', '0')}"),
             ui.tags.p(f"Columnas: {file_info.get('columns', '0')}"),
-            ui.tags.p(f"Tamaño: {file_size_kb or '0 KB'}"),
-            ui.tags.h5("Primeras 10 filas:"),
+            ui.tags.h5("Primeras 10 filas"),
             table,
             class_="data-preview-content"
         )
@@ -1011,7 +1208,16 @@ def server(input, output, session):
     @render.ui
     def model_description():
         """Show model description based on selection"""
-        model_type = input.model_type() if hasattr(input, 'model_type') else "ARIMA"
+        # Try to get from input first, then fallback to state
+        if hasattr(input, 'model_type'):
+            try:
+                model_type = input.model_type()
+                if not model_type:
+                    model_type = app_state.get().get("model_type", None)
+            except:
+                model_type = app_state.get().get("model_type", None)
+        else:
+            model_type = app_state.get().get("model_type", None)
         
         descriptions = {
             "AR": "Modelo Autoregresivo: El valor actual depende de valores pasados. Útil para series con persistencia.",
@@ -1022,7 +1228,7 @@ def server(input, output, session):
         
         return ui.div(
             ui.tags.p(descriptions.get(model_type, ""), class_="text-muted"),
-            class_="mt-2"
+            class_="mt-2 model-description"
         )
     
     @render.ui
@@ -1036,7 +1242,14 @@ def server(input, output, session):
                 class_="mb-3"
             )
         
-        model_type = input.model_type() if hasattr(input, 'model_type') else "ARIMA"
+        model_type = input.model_type() if hasattr(input, 'model_type') else None
+        if not model_type:
+            model_type = app_state.get().get("model_type", None)
+        if not model_type:
+            return ui.div(
+                ui.tags.p("Selecciona un tipo de modelo para configurar parámetros.", class_="text-muted"),
+                class_="mb-3"
+            )
         
         if model_type == "AR":
             return ui.div(
@@ -1141,7 +1354,7 @@ def server(input, output, session):
     def execution_summary():
         """Show execution configuration summary"""
         state = app_state.get()
-        model_type = state.get("model_type", "ARIMA")
+        model_type = state.get("model_type", "N/A")
         value_col = state.get("value_column", "N/A")
         auto_select = input.auto_select() if hasattr(input, 'auto_select') else True
         
@@ -1603,10 +1816,22 @@ def server(input, output, session):
         if not hasattr(input, 'model_type'):
             return
         
-        model_type = input.model_type()
-        new_state = app_state.get().copy()
-        new_state["model_type"] = model_type
-        app_state.set(new_state)
+        try:
+            model_type = input.model_type()
+            # Normalize empty selection to None
+            if model_type is not None and model_type != "":
+                new_state = app_state.get().copy()
+                new_state["model_type"] = model_type
+                app_state.set(new_state)
+            else:
+                # Clear model_type if user selects placeholder
+                new_state = app_state.get().copy()
+                new_state["model_type"] = None
+                app_state.set(new_state)
+        except Exception as e:
+            # If there's an error getting the value, don't update state
+            print(f"Error getting model_type: {e}")
+            pass
     
     # Model execution handler
     @reactive.effect
@@ -1788,18 +2013,10 @@ def server(input, output, session):
         elif step == 1:  # Visualization step
             # Require validated data
             return state.get("data_validated", False)
-        elif step == 2:  # Model selection step
-            # Require validated data and model type selected
-            return (state.get("data_validated", False) and 
-                    state.get("model_type") is not None)
-        elif step == 3:  # Execution step
-            # Require model configured
-            return (state.get("data_validated", False) and 
-                    state.get("model_type") is not None)
-        elif step == 4:  # Results step
+        elif step == 2:  # Model + Execution step
             # Require analysis complete
             return state.get("analysis_complete", False)
-        elif step == 5:  # Reports step
+        elif step == 3:  # Results step
             # Require analysis complete
             return state.get("analysis_complete", False)
         return True

@@ -6,22 +6,23 @@ def render_model_selection_ui() -> ui.Tag:
     """Render model selection step UI components"""
     
     return create_card(
-        title="⚙️ Selección de Modelo",
-        subtitle="Configura el modelo de series temporales",
+        title="⚙️ Modelo y ejecución",
+        subtitle="Configura el modelo y ejecuta el análisis",
         content=ui.div(
             # Model type selector
             ui.div(
-                ui.tags.h5("Tipo de Modelo:"),
-                ui.input_radio_buttons(
+                ui.tags.h5("Tipo de modelo:"),
+                ui.input_select(
                     "model_type",
                     "",
                     choices={
+                        "": "— Selecciona un modelo —",
                         "AR": "AR - Autoregresivo",
                         "MA": "MA - Media Móvil",
                         "ARMA": "ARMA - Combinado",
                         "ARIMA": "ARIMA - Integrado"
                     },
-                    selected="ARIMA"
+                    selected=""
                 ),
                 ui.output_ui("model_description"),
                 class_="mb-4"
@@ -36,7 +37,7 @@ def render_model_selection_ui() -> ui.Tag:
             ui.output_ui("manual_parameters_ui"),
             # Additional options
             ui.div(
-                ui.tags.h5("Opciones Adicionales:"),
+                ui.tags.h5("Opciones adicionales:"),
                 create_form_group(
                     label="Pasos a Pronosticar",
                     control=ui.input_numeric("forecast_steps", "", value=10, min=1, max=100),
@@ -44,6 +45,19 @@ def render_model_selection_ui() -> ui.Tag:
                 ),
                 ui.input_switch("include_confidence", "Incluir intervalos de confianza", value=True),
                 class_="mt-3"
+            ),
+            # Execution controls integrated here
+            ui.div(
+                ui.tags.h5("Ejecución:"),
+                ui.output_ui("execution_summary"),
+                ui.div(
+                    ui.input_action_button("start_execution", "▶️ Ajustar y pronosticar", class_="btn btn-primary btn-lg"),
+                    class_="my-3 text-center"
+                ),
+                ui.output_ui("execution_status_ui"),
+                ui.tags.h5("Log de ejecución:"),
+                ui.output_ui("execution_log"),
+                class_="mt-4"
             )
         )
     )

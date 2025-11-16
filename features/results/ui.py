@@ -6,18 +6,18 @@ def render_results_ui() -> ui.Tag:
     """Render results step UI components"""
     
     return create_card(
-        title="📈 Resultados del Análisis",
+        title="📈 Resultados del análisis",
         subtitle="Métricas y predicciones del modelo",
         content=ui.div(
             # Model info
             ui.div(
-                ui.tags.h5("Información del Modelo:"),
+                ui.tags.h5("Información del modelo:"),
                 ui.output_ui("model_info_ui"),
                 class_="mb-4"
             ),
             # Metrics
             ui.div(
-                ui.tags.h5("Métricas de Evaluación:"),
+                ui.tags.h5("Métricas de evaluación:"),
                 ui.output_ui("metrics_cards"),
                 class_="mb-4"
             ),
@@ -29,13 +29,13 @@ def render_results_ui() -> ui.Tag:
             ),
             # Forecast table
             ui.div(
-                ui.tags.h5("Valores del Pronóstico:"),
+                ui.tags.h5("Valores del pronóstico:"),
                 ui.output_ui("forecast_table_ui"),
                 class_="mb-4"
             ),
             # Diagnostics
             ui.div(
-                ui.tags.h5("Diagnósticos del Modelo:"),
+                ui.tags.h5("Diagnósticos del modelo:"),
                 ui.div(
                     ui.div(
                         ui.output_plot("residuals_plot", height="300px"),
@@ -49,10 +49,12 @@ def render_results_ui() -> ui.Tag:
                 ),
                 class_="mb-4"
             ),
-            # Export button
+            # Export and report actions
             ui.div(
-                ui.input_action_button("export_results", "💾 Exportar Resultados (CSV)", class_="btn btn-primary"),
-                class_="text-center"
+                ui.input_action_button("export_results", "💾 Exportar resultados (CSV)", class_="btn btn-primary"),
+                ui.input_action_button("generate_report", "📄 Generar reporte", class_="btn btn-secondary"),
+                ui.input_action_button("download_pdf", "📥 Descargar PDF", class_="btn btn-secondary"),
+                class_="d-flex gap-2 justify-center"
             )
         )
     )
