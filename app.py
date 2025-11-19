@@ -4,8 +4,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend for Shiny
+import logging
+import traceback
 
 from shiny import App, ui, reactive, render
+
+# Setup logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 from components.stepper import StepperComponent
 from components.layout import create_app_layout, create_data_table, create_metric_card, create_form_group, create_file_upload_area
 from features.upload.ui import render_upload_ui
@@ -772,7 +781,7 @@ app_ui = ui.page_fluid(
     
     # Main app layout
     create_app_layout(
-        title="TSLib - Análisis de Series de Tiempo",
+        title="Análisis de Series de Tiempo",
         subtitle="Análisis avanzado con modelos de series temporales"
     ),
     
@@ -805,6 +814,8 @@ def server(input, output, session):
         "model_config": {},
         "fitted_model": None,
         "forecast_results": None,
+        "parallel_workflow": None,
+        "parallel_forecast_results": None,
         "analysis_complete": False,
         "execution_log": [],
         "exploratory_analysis": None
@@ -999,6 +1010,77 @@ def server(input, output, session):
         )
     
     @render.ui
+    def date_column_select():
+        """Render date column select with state hydration to avoid resets"""
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        
+        if df is None:
+            return ui.div()
+        
+        all_cols = list(df.columns)
+        
+        # Get current value from state
+        current = state.get("date_column")
+        
+        # If input already has a value (during same session), prefer it
+        try:
+            current_input = input.date_column() if hasattr(input, 'date_column') else None
+        except Exception:
+            current_input = None
+        
+        # Detect datetime column for default
+        datetime_col = tslib_service.detect_datetime_column(df)
+        default_value = datetime_col if datetime_col else "(Ninguna)"
+        
+        # Use current input, then state, then default
+        selected_value = current_input or (current if current else default_value)
+        
+        return ui.input_select(
+            "date_column",
+            "",
+            choices=["(Ninguna)"] + all_cols,
+            selected=selected_value
+        )
+    
+    @render.ui
+    def value_column_select():
+        """Render value column select with state hydration to avoid resets"""
+        df = uploaded_dataframe.get()
+        state = app_state.get()
+        
+        if df is None:
+            return ui.div()
+        
+        # Get numeric columns
+        numeric_cols = tslib_service.get_numeric_columns(df)
+        
+        if not numeric_cols:
+            return ui.div()
+        
+        # Get current value from state
+        current = state.get("value_column")
+        
+        # If input already has a value (during same session), prefer it
+        try:
+            current_input = input.value_column() if hasattr(input, 'value_column') else None
+        except Exception:
+            current_input = None
+        
+        # Default to first numeric column
+        default_value = numeric_cols[0] if numeric_cols else None
+        
+        # Use current input, then state, then default
+        selected_value = current_input or (current if current else default_value)
+        
+        return ui.input_select(
+            "value_column",
+            "",
+            choices=numeric_cols,
+            selected=selected_value
+        )
+    
+    @render.ui
     def column_selection_ui():
         """Render column selection UI after data is loaded"""
         df = uploaded_dataframe.get()
@@ -1016,22 +1098,13 @@ def server(input, output, session):
                 class_="mt-3"
             )
         
-        # Detect datetime column
-        datetime_col = tslib_service.detect_datetime_column(df)
-        all_cols = list(df.columns)
-        
         return ui.div(
             ui.tags.h5("Configuración de columnas:", class_="mt-4"),
             ui.div(
                 ui.div(
                     create_form_group(
                         label="Columna de Fecha/Tiempo",
-                        control=ui.input_select(
-                            "date_column",
-                            "",
-                            choices=["(Ninguna)"] + all_cols,
-                            selected=datetime_col if datetime_col else "(Ninguna)"
-                        ),
+                        control=ui.output_ui("date_column_select"),
                         help_text="Columna para el eje X en gráficos"
                     ),
                     class_="col-md-6"
@@ -1039,12 +1112,7 @@ def server(input, output, session):
                 ui.div(
                     create_form_group(
                         label="Columna de Valores",
-                        control=ui.input_select(
-                            "value_column",
-                            "",
-                            choices=numeric_cols,
-                            selected=numeric_cols[0] if numeric_cols else None
-                        ),
+                        control=ui.output_ui("value_column_select"),
                         help_text="Selecciona la columna con los valores de la serie temporal"
                     ),
                     class_="col-md-6"
@@ -1817,6 +1885,239 @@ def server(input, output, session):
             fig.patch.set_facecolor('#1a1a1a')
             return fig
     
+    # Parallel ARIMA model renders
+    @render.ui
+    def linear_model_title():
+        """Show linear model title only for ARIMA models"""
+        state = app_state.get()
+        model_type = state.get("model_type")
+        
+        if model_type == "ARIMA":
+            return ui.tags.h4("Modelo ARIMA Lineal", class_="mb-3")
+        return ui.div()
+    
+    @render.ui
+    def parallel_model_section():
+        """Render parallel ARIMA model section"""
+        state = app_state.get()
+        model_type = state.get("model_type")
+        parallel_workflow = state.get("parallel_workflow")
+        
+        # Only show for ARIMA models
+        if model_type != "ARIMA":
+            return ui.div()
+        
+        # Check if parallel model was executed
+        if parallel_workflow is None:
+            state = app_state.get()
+            execution_log = state.get("execution_log", [])
+            # Find error messages related to parallel model
+            error_messages = [log for log in execution_log if "Error" in log or "error" in log or "⚠" in log]
+            
+            error_text = "El modelo paralelo no está disponible. Puede que haya ocurrido un error durante la ejecución."
+            if error_messages:
+                error_text += f"\n\nÚltimos mensajes de error:\n" + "\n".join(error_messages[-3:])  # Show last 3 error messages
+            
+            return ui.div(
+                ui.tags.p(error_text, class_="text-muted"),
+                ui.tags.p("Revisa los logs en la consola para más detalles.", class_="text-muted", style="font-size: 0.9em;"),
+                class_="mb-4"
+            )
+        
+        return ui.div(
+            # Parallel model info
+            ui.div(
+                ui.tags.h5("Información del modelo paralelo:"),
+                ui.output_ui("parallel_model_info_ui"),
+                class_="mb-4"
+            ),
+            # Parallel metrics
+            ui.div(
+                ui.tags.h5("Métricas de evaluación (paralelo):"),
+                ui.output_ui("parallel_metrics_cards"),
+                class_="mb-4"
+            ),
+            # Parallel forecast plot
+            ui.div(
+                ui.tags.h5("Pronóstico (paralelo):"),
+                ui.output_plot("parallel_forecast_plot", height="400px"),
+                class_="mb-4"
+            ),
+            # Parallel forecast table
+            ui.div(
+                ui.tags.h5("Valores del pronóstico (paralelo):"),
+                ui.output_ui("parallel_forecast_table_ui"),
+                class_="mb-4"
+            )
+        )
+    
+    @render.ui
+    def parallel_model_info_ui():
+        """Show parallel ARIMA model information"""
+        state = app_state.get()
+        parallel_workflow = state.get("parallel_workflow")
+        
+        if not parallel_workflow:
+            return ui.div(ui.tags.p("No hay información disponible", class_="text-muted"))
+        
+        # Get metrics
+        metrics = tslib_service.get_parallel_arima_metrics(parallel_workflow)
+        order = metrics.get('order', 'N/A')
+        
+        return ui.div(
+            ui.tags.p(f"Tipo de Modelo: ARIMA Paralelo"),
+            ui.tags.p(f"Orden: {order}"),
+            class_="text-muted"
+        )
+    
+    @render.ui
+    def parallel_metrics_cards():
+        """Render parallel ARIMA metrics cards"""
+        state = app_state.get()
+        parallel_workflow = state.get("parallel_workflow")
+        
+        if not parallel_workflow:
+            return ui.div(ui.tags.p("No hay métricas disponibles", class_="text-muted"))
+        
+        metrics = tslib_service.get_parallel_arima_metrics(parallel_workflow)
+        
+        cards = []
+        
+        # Order card
+        if metrics.get('order'):
+            cards.append(create_metric_card(
+                metrics.get('order', 'N/A'),
+                "Orden",
+                "⚙️"
+            ))
+        
+        # MAE card
+        if metrics.get('mae') is not None:
+            cards.append(create_metric_card(
+                f"{metrics.get('mae', 0):.4f}",
+                "MAE",
+                "📊"
+            ))
+        
+        # RMSE card
+        if metrics.get('rmse') is not None:
+            cards.append(create_metric_card(
+                f"{metrics.get('rmse', 0):.4f}",
+                "RMSE",
+                "📊"
+            ))
+        
+        # MAPE card
+        if metrics.get('mape') is not None:
+            cards.append(create_metric_card(
+                f"{metrics.get('mape', 0):.4f}",
+                "MAPE",
+                "📊"
+            ))
+        
+        if not cards:
+            return ui.div(ui.tags.p("No hay métricas disponibles", class_="text-muted"))
+        
+        return ui.div(*cards, class_="metrics-grid")
+    
+    @render.plot
+    def parallel_forecast_plot():
+        """Render parallel ARIMA forecast plot"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.text(0.5, 0.5, 'Ejecuta el análisis primero', ha='center', va='center', color='white')
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        df = uploaded_dataframe.get()
+        value_col = state.get("value_column")
+        parallel_forecast_results = state.get("parallel_forecast_results")
+        
+        if not parallel_forecast_results or df is None:
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.text(0.5, 0.5, 'No hay pronóstico paralelo disponible', ha='center', va='center', color='white')
+            ax.axis('off')
+            ax.set_facecolor('#2d2d2d')
+            fig.patch.set_facecolor('#1a1a1a')
+            return fig
+        
+        # Plot historical data + forecast
+        fig, ax = plt.subplots(figsize=(10, 4))
+        
+        # Convert to numeric if needed
+        if pd.api.types.is_numeric_dtype(df[value_col]):
+            historical = df[value_col].values
+        else:
+            historical = tslib_service.convert_to_numeric(df, value_col).values
+        forecast = parallel_forecast_results.get('forecast', [])
+        lower = parallel_forecast_results.get('lower_bound')
+        upper = parallel_forecast_results.get('upper_bound')
+        
+        n_hist = len(historical)
+        n_fore = len(forecast)
+        
+        # Plot historical
+        ax.plot(range(n_hist), historical, label='Histórico', color='#00d4aa', linewidth=1.5)
+        
+        # Plot forecast
+        forecast_x = range(n_hist, n_hist + n_fore)
+        ax.plot(forecast_x, forecast, label='Pronóstico (Paralelo)', color='#ff6b6b', linewidth=1.5, linestyle='--')
+        
+        # Plot confidence intervals if available
+        if lower is not None and upper is not None:
+            ax.fill_between(forecast_x, lower, upper, alpha=0.3, color='#ff6b6b', label='IC 95%')
+        
+        ax.set_xlabel('Tiempo')
+        ax.set_ylabel('Valor')
+        ax.set_title('Pronóstico de Serie Temporal (Modelo Paralelo)', fontsize=12, fontweight='bold')
+        ax.legend(loc='best', facecolor='#2d2d2d', edgecolor='white', labelcolor='white')
+        ax.grid(True, alpha=0.3)
+        ax.set_facecolor('#2d2d2d')
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.tick_params(colors='white')
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.title.set_color('white')
+        ax.spines['bottom'].set_color('white')
+        ax.spines['left'].set_color('white')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        
+        plt.tight_layout()
+        return fig
+    
+    @render.ui
+    def parallel_forecast_table_ui():
+        """Render parallel ARIMA forecast table"""
+        state = app_state.get()
+        if not state.get("analysis_complete"):
+            return ui.div(ui.tags.p("Ejecuta el análisis primero", class_="text-muted"))
+        
+        parallel_forecast_results = state.get("parallel_forecast_results")
+        if not parallel_forecast_results:
+            return ui.div(ui.tags.p("No hay pronóstico paralelo disponible", class_="text-muted"))
+        
+        forecast = parallel_forecast_results.get('forecast', [])
+        lower = parallel_forecast_results.get('lower_bound')
+        upper = parallel_forecast_results.get('upper_bound')
+        
+        # Create table data
+        table_data = []
+        for i, val in enumerate(forecast, 1):
+            row = [f"t+{i}", f"{val:.4f}"]
+            if lower is not None and upper is not None:
+                row.extend([f"{lower[i-1]:.4f}", f"{upper[i-1]:.4f}"])
+            table_data.append(row)
+        
+        headers = ["Paso", "Pronóstico"]
+        if lower is not None:
+            headers.extend(["Límite Inferior", "Límite Superior"])
+        
+        return create_data_table(table_data, headers=headers)
+    
     # File upload handler
     @reactive.effect
     @reactive.event(input.file_upload)
@@ -1942,7 +2243,7 @@ def server(input, output, session):
     @reactive.effect
     @reactive.event(input.model_type)
     def handle_model_type_change():
-        """Handle model type selection change"""
+        """Handle model type change and update state"""
         if not hasattr(input, 'model_type'):
             return
         
@@ -1952,11 +2253,16 @@ def server(input, output, session):
             if model_type is not None and model_type not in ["", "__none__"]:
                 new_state = app_state.get().copy()
                 new_state["model_type"] = model_type
+                # Clear parallel model results when model type changes
+                new_state["parallel_workflow"] = None
+                new_state["parallel_forecast_results"] = None
                 app_state.set(new_state)
             else:
                 # Clear model_type if user selects placeholder
                 new_state = app_state.get().copy()
                 new_state["model_type"] = None
+                new_state["parallel_workflow"] = None
+                new_state["parallel_forecast_results"] = None
                 app_state.set(new_state)
         except Exception as e:
             # If there's an error getting the value, don't update state
@@ -2029,7 +2335,7 @@ def server(input, output, session):
             ]
             app_state.set(new_state)
             
-            # Fit model
+            # Fit linear model
             fitted_model = tslib_service.fit_model(
                 data=data,
                 model_type=model_type,
@@ -2039,20 +2345,90 @@ def server(input, output, session):
             
             # Update log
             new_state = app_state.get().copy()
-            new_state["execution_log"].append("Generando pronóstico...")
+            new_state["execution_log"].append("Generando pronóstico (modelo lineal)...")
             app_state.set(new_state)
             
-            # Generate forecast
+            # Generate forecast for linear model
             forecast_results = tslib_service.get_forecast(
                 model=fitted_model,
                 steps=forecast_steps,
                 return_conf_int=include_conf
             )
             
+            # For ARIMA models, also fit parallel model
+            parallel_workflow = None
+            parallel_forecast_results = None
+            if model_type == "ARIMA":
+                logger.info("ARIMA model selected, starting parallel model execution")
+                logger.info(f"Data length: {len(data)}")
+                logger.info(f"Data type: {type(data)}")
+                
+                # Update log
+                new_state = app_state.get().copy()
+                new_state["execution_log"].append("Ajustando modelo ARIMA paralelo (esto puede tardar)...")
+                app_state.set(new_state)
+                
+                try:
+                    logger.info("Attempting to import ParallelARIMAWorkflow...")
+                    from tslib.spark import ParallelARIMAWorkflow
+                    logger.info("ParallelARIMAWorkflow imported successfully")
+                    
+                    # Fit parallel ARIMA model
+                    logger.info("Calling fit_parallel_arima...")
+                    parallel_workflow = tslib_service.fit_parallel_arima(
+                        data=data,
+                        verbose=False  # Set to False to avoid too much output in UI
+                    )
+                    logger.info("Parallel ARIMA model fitted successfully")
+                    
+                    # Update log
+                    new_state = app_state.get().copy()
+                    new_state["execution_log"].append("Generando pronóstico (modelo paralelo)...")
+                    app_state.set(new_state)
+                    
+                    # Generate forecast for parallel model
+                    logger.info("Generating parallel forecast...")
+                    parallel_forecast_results = tslib_service.get_parallel_arima_forecast(
+                        workflow=parallel_workflow,
+                        steps=forecast_steps,
+                        return_conf_int=include_conf
+                    )
+                    logger.info("Parallel forecast generated successfully")
+                    
+                    new_state = app_state.get().copy()
+                    new_state["execution_log"].append("✓ Modelo paralelo completado")
+                    app_state.set(new_state)
+                except ImportError as e:
+                    error_str = str(e)
+                    logger.error(f"Import error: {error_str}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    
+                    # Provide specific guidance based on error
+                    if "PyArrow" in error_str or "pyarrow" in error_str.lower():
+                        error_msg = "PyArrow >= 11.0.0 es requerido. Instálalo con: pip install 'pyarrow>=11.0.0'"
+                    elif "pyspark" in error_str.lower():
+                        error_msg = "PySpark no está instalado. Instálalo con: pip install pyspark"
+                    else:
+                        error_msg = f"Error de importación: {error_str}"
+                    
+                    new_state = app_state.get().copy()
+                    new_state["execution_log"].append(f"⚠ {error_msg}")
+                    app_state.set(new_state)
+                except Exception as e:
+                    error_msg = f"Error en modelo paralelo: {type(e).__name__}: {str(e)}"
+                    logger.error(error_msg)
+                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    # Log error but don't fail the whole execution
+                    new_state = app_state.get().copy()
+                    new_state["execution_log"].append(f"⚠ {error_msg}")
+                    app_state.set(new_state)
+            
             # Update state with results
             new_state = app_state.get().copy()
             new_state["fitted_model"] = fitted_model
             new_state["forecast_results"] = forecast_results
+            new_state["parallel_workflow"] = parallel_workflow
+            new_state["parallel_forecast_results"] = parallel_forecast_results
             new_state["analysis_complete"] = True
             new_state["execution_log"].append("✓ Análisis completado")
             app_state.set(new_state)

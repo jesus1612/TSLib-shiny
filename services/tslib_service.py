@@ -5,10 +5,41 @@ from typing import Dict, List, Optional, Tuple, Any
 import matplotlib.pyplot as plt
 import io
 import base64
+import logging
 
 # Import TSLib components
 from tslib import ARModel, MAModel, ARMAModel, ARIMAModel
 from tslib.preprocessing.validation import DataValidator
+
+# Setup logger
+logger = logging.getLogger(__name__)
+
+# Try to import ParallelARIMAWorkflow and check Spark availability
+PARALLEL_ARIMA_AVAILABLE = False
+SPARK_CHECKED = False
+SPARK_AVAILABLE = False
+ParallelARIMAWorkflow = None
+
+try:
+    from tslib.spark import ParallelARIMAWorkflow
+    from tslib.utils.checks import check_spark_availability
+    
+    # Check if Spark is actually available (not just imported)
+    SPARK_AVAILABLE = check_spark_availability()
+    PARALLEL_ARIMA_AVAILABLE = SPARK_AVAILABLE
+    SPARK_CHECKED = True
+    
+    if PARALLEL_ARIMA_AVAILABLE:
+        logger.info("ParallelARIMAWorkflow imported and Spark is available")
+    else:
+        logger.warning("ParallelARIMAWorkflow imported but Spark is not available")
+        logger.warning("Java gateway may not be running. Check Java installation and JAVA_HOME.")
+except ImportError as e:
+    logger.warning(f"ParallelARIMAWorkflow not available: {str(e)}")
+    logger.warning("Parallel ARIMA model will not be available. Make sure Spark is configured.")
+except Exception as e:
+    logger.warning(f"Error checking Spark availability: {str(e)}")
+    PARALLEL_ARIMA_AVAILABLE = False
 
 
 class TSLibService:
@@ -447,4 +478,181 @@ class TSLibService:
             'q75': float(np.percentile(data, 75)),
             'length': len(data)
         }
+    
+    def fit_parallel_arima(
+        self,
+        data: np.ndarray,
+        verbose: bool = True
+    ) -> Any:
+        """
+        Fit parallel ARIMA model using Spark
+        
+        Args:
+            data: Time series data
+            verbose: Whether to show verbose output
+            
+        Returns:
+            Fitted ParallelARIMAWorkflow instance
+        """
+        if not PARALLEL_ARIMA_AVAILABLE:
+            error_msg = "ParallelARIMAWorkflow no está disponible. Verifica que Spark esté configurado correctamente."
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        
+        logger.info("Starting parallel ARIMA model fitting")
+        logger.info(f"Data shape: {data.shape if hasattr(data, 'shape') else len(data)}")
+        logger.info(f"Data type: {type(data)}")
+        logger.info(f"Data sample (first 5): {data[:5] if len(data) >= 5 else data}")
+        
+        try:
+            logger.info("Creating ParallelARIMAWorkflow instance...")
+            workflow = ParallelARIMAWorkflow(verbose=verbose)
+            logger.info("ParallelARIMAWorkflow instance created successfully")
+            
+            logger.info("Fitting parallel ARIMA model (this may take a while)...")
+            workflow.fit(data)
+            logger.info("Parallel ARIMA model fitted successfully")
+            
+            # Log model order if available
+            if hasattr(workflow, 'order_'):
+                logger.info(f"Model order: {workflow.order_}")
+            
+            return workflow
+            
+        except ImportError as e:
+            error_str = str(e)
+            logger.error(f"Import error: {error_str}")
+            
+            # Check for specific missing dependencies
+            if "PyArrow" in error_str or "pyarrow" in error_str.lower():
+                error_msg = (
+                    "PyArrow >= 11.0.0 es requerido para el modelo ARIMA paralelo. "
+                    "Instálalo con: pip install 'pyarrow>=11.0.0'"
+                )
+            elif "pyspark" in error_str.lower():
+                error_msg = (
+                    "PySpark no está instalado. Instálalo con: pip install pyspark"
+                )
+            else:
+                error_msg = f"Error de importación: {error_str}. Verifica que todas las dependencias estén instaladas."
+            
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        except IndexError as e:
+            # Handle case where data is too small for parallel workflow
+            error_str = str(e)
+            if "list index out of range" in error_str:
+                logger.warning(f"Dataset too small for parallel workflow: {len(data)} observations")
+                error_msg = (
+                    f"El modelo ARIMA paralelo requiere más datos. "
+                    f"Tienes {len(data)} observaciones, pero se recomiendan al menos 50-100 observaciones. "
+                    f"Usa el modelo ARIMA lineal para datasets pequeños."
+                )
+            else:
+                error_msg = f"Error en el procesamiento de datos: {error_str}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
+        except Exception as e:
+            logger.error(f"Error fitting parallel ARIMA model: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise RuntimeError(f"Error al ajustar modelo ARIMA paralelo: {str(e)}")
+    
+    def get_parallel_arima_forecast(
+        self,
+        workflow: Any,
+        steps: int = 10,
+        return_conf_int: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Generate forecast from parallel ARIMA workflow
+        
+        Args:
+            workflow: Fitted ParallelARIMAWorkflow instance
+            steps: Number of steps to forecast
+            return_conf_int: Whether to return confidence intervals
+            
+        Returns:
+            Dictionary with forecast results
+        """
+        logger.info(f"Generating parallel ARIMA forecast: steps={steps}, return_conf_int={return_conf_int}")
+        try:
+            if return_conf_int:
+                logger.info("Calling workflow.predict with confidence intervals...")
+                forecast, conf_int = workflow.predict(steps=steps, return_conf_int=True)
+                logger.info(f"Forecast generated: {len(forecast)} values")
+                logger.info(f"Confidence intervals: lower={len(conf_int[0]) if conf_int else 0}, upper={len(conf_int[1]) if conf_int else 0}")
+                return {
+                    'forecast': forecast,
+                    'lower_bound': conf_int[0],
+                    'upper_bound': conf_int[1],
+                    'steps': steps
+                }
+            else:
+                logger.info("Calling workflow.predict without confidence intervals...")
+                forecast = workflow.predict(steps=steps, return_conf_int=False)
+                logger.info(f"Forecast generated: {len(forecast)} values")
+                return {
+                    'forecast': forecast,
+                    'lower_bound': None,
+                    'upper_bound': None,
+                    'steps': steps
+                }
+        except Exception as e:
+            logger.error(f"Error generating parallel forecast: {type(e).__name__}: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise RuntimeError(f"Error al generar forecast paralelo: {str(e)}")
+    
+    def get_parallel_arima_metrics(self, workflow: Any) -> Dict[str, Any]:
+        """
+        Extract metrics from parallel ARIMA workflow
+        
+        Args:
+            workflow: Fitted ParallelARIMAWorkflow instance
+            
+        Returns:
+            Dictionary with model metrics and results
+        """
+        try:
+            metrics = {}
+            
+            # Get order
+            if hasattr(workflow, 'order_'):
+                order = workflow.order_
+                if isinstance(order, tuple):
+                    metrics['order'] = f"ARIMA{order}"
+                else:
+                    metrics['order'] = f"ARIMA({order})"
+            
+            # Get parameters if available
+            if hasattr(workflow, 'parameters_'):
+                metrics['parameters'] = workflow.parameters_
+            
+            # Get results summary
+            if hasattr(workflow, 'get_results'):
+                results = workflow.get_results()
+                
+                # Extract validation metrics
+                if 'step_results' in results:
+                    validation = results['step_results'].get('step7_8_validation', {})
+                    if 'metrics' in validation:
+                        metrics['mae'] = validation['metrics'].get('avg_mae')
+                        metrics['rmse'] = validation['metrics'].get('avg_rmse')
+                        metrics['mape'] = validation['metrics'].get('avg_mape')
+                
+                # Extract diagnostics
+                diagnostics = results['step_results'].get('step9_diagnostics', {})
+                if 'pass_rates' in diagnostics:
+                    metrics['diagnostics_pass_rate'] = diagnostics['pass_rates'].get('overall')
+            
+            # Get summary text
+            if hasattr(workflow, 'summary'):
+                metrics['summary'] = workflow.summary()
+            
+            return metrics
+            
+        except Exception as e:
+            print(f"Error extracting parallel ARIMA metrics: {e}")
+            return {}
 
