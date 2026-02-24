@@ -530,7 +530,7 @@ app_ui = ui.page_fluid(
             /* Input styling */
             input[type="number"], input[type="text"], input[type="email"], input[type="password"], 
             select, textarea {
-              background-color: var(--bg-tertiary);
+              background-color: var(--bg-tertiary) !important;
               border: 1px solid var(--border-color);
               border-radius: var(--radius-md);
               color: var(--text-primary) !important;
@@ -538,11 +538,20 @@ app_ui = ui.page_fluid(
               font-size: var(--font-size-sm);
             }
             
+            input[type="number"]:hover, input[type="text"]:hover, input[type="email"]:hover, 
+            input[type="password"]:hover, select:hover, textarea:hover {
+              background-color: var(--bg-hover) !important;
+              border-color: var(--border-light);
+              color: var(--text-primary) !important;
+            }
+            
             input[type="number"]:focus, input[type="text"]:focus, input[type="email"]:focus, 
             input[type="password"]:focus, select:focus, textarea:focus {
-              outline: none;
-              border-color: var(--accent-primary);
-              box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.2);
+              outline: none !important;
+              border-color: var(--accent-primary) !important;
+              box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.2) !important;
+              background-color: var(--bg-hover) !important;
+              color: var(--text-primary) !important;
             }
             
             /* Select dropdown styling */
@@ -1178,14 +1187,25 @@ def server(input, output, session):
         else:
             y_values = tslib_service.convert_to_numeric(df, value_col)
         
+        # Handle missing values for plotting (forward fill)
+        y_values_plot = y_values.copy()
+        if y_values_plot.isna().any():
+            # Use interpolation for missing values
+            mask = y_values_plot.isna()
+            if mask.any() and not mask.all():
+                indices = np.arange(len(y_values_plot))
+                y_values_plot[mask] = np.interp(indices[mask], indices[~mask], y_values_plot[~mask])
+            else:
+                y_values_plot = y_values_plot.fillna(0)
+        
         fig, ax = plt.subplots(figsize=(10, 4))
         
         if date_col and date_col != "(Ninguna)" and date_col in df.columns:
             x = pd.to_datetime(df[date_col], errors='coerce')
-            ax.plot(x, y_values, linewidth=1.5, color='#00d4aa')
+            ax.plot(x, y_values_plot, linewidth=1.5, color='#00d4aa')
             ax.set_xlabel('Fecha')
         else:
-            ax.plot(y_values, linewidth=1.5, color='#00d4aa')
+            ax.plot(y_values_plot, linewidth=1.5, color='#00d4aa')
             ax.set_xlabel('Índice')
         
         ax.set_ylabel(value_col)
@@ -1223,6 +1243,7 @@ def server(input, output, session):
         else:
             data = tslib_service.convert_to_numeric(df, value_col).values
         
+        # Handle missing values (stats function already handles NaN)
         stats = tslib_service.calculate_basic_stats(data)
         
         return ui.div(
@@ -1401,15 +1422,10 @@ def server(input, output, session):
         except Exception:
             n_obs = -1
             nan_count = -1
-        if analysis is None:
-            return ui.div(ui.tags.small(f"[DEBUG] Correlación: sin análisis. n_obs={n_obs}, NaNs={nan_count}", class_="text-muted"))
         acf_vals = analysis.get("acf", [])
         pacf_vals = analysis.get("pacf", [])
         acf_len = len(acf_vals) if acf_vals is not None else 0
         pacf_len = len(pacf_vals) if pacf_vals is not None else 0
-        return ui.div(
-            ui.tags.small(f"[DEBUG] Correlación: n_obs={n_obs}, NaNs={nan_count}, len(ACF)={acf_len}, len(PACF)={pacf_len}", class_="text-muted")
-        )
     
     # Model selection renders
     @render.ui
@@ -1693,6 +1709,16 @@ def server(input, output, session):
             historical = df[value_col].values
         else:
             historical = tslib_service.convert_to_numeric(df, value_col).values
+        
+        # Handle missing values in historical data (forward fill for plotting)
+        if np.any(np.isnan(historical)):
+            mask = np.isnan(historical)
+            indices = np.arange(len(historical))
+            if np.any(~mask):
+                historical[mask] = np.interp(indices[mask], indices[~mask], historical[~mask])
+            else:
+                historical = np.zeros_like(historical)
+        
         forecast = forecast_results.get('forecast', [])
         lower = forecast_results.get('lower_bound')
         upper = forecast_results.get('upper_bound')
@@ -1823,20 +1849,35 @@ def server(input, output, session):
         residuals = fitted_model.get_residuals()
         
         # Calculate ACF of residuals
+        # NOTE: ACFCalculator.calculate() returns a tuple (lags, values), not just values
         try:
             from tslib.core.acf_pacf import ACFCalculator
             acf_calc = ACFCalculator()
             
-            # Try with nlags parameter first, fallback to default
-            try:
-                acf_values = acf_calc.calculate(residuals, nlags=min(20, len(residuals) // 2))
-            except TypeError:
-                acf_values = acf_calc.calculate(residuals)
-                if isinstance(acf_values, (list, np.ndarray)) and len(acf_values) > 20:
-                    acf_values = acf_values[:20]
+            # Calculate ACF (returns tuple: lags, values)
+            acf_result = acf_calc.calculate(residuals)
+            
+            # Extract values from tuple
+            if isinstance(acf_result, tuple) and len(acf_result) == 2:
+                lags, acf_values = acf_result
+            else:
+                # Fallback: assume it's the values directly
+                acf_values = acf_result
+            
+            # Convert to numpy array if needed
+            if isinstance(acf_values, np.ndarray):
+                pass  # Already numpy array
+            elif isinstance(acf_values, list):
+                acf_values = np.array(acf_values)
+            else:
+                acf_values = np.array(list(acf_values)) if hasattr(acf_values, '__iter__') else np.array([])
+            
+            # Truncate to reasonable length (max 20 lags)
+            if len(acf_values) > 20:
+                acf_values = acf_values[:20]
             
             # Check if we got valid values
-            if not acf_values or len(acf_values) == 0:
+            if acf_values is None or len(acf_values) == 0:
                 print(f"[DEBUG] Residuals ACF unavailable. len(residuals)={len(residuals)} len(acf)={len(acf_values) if acf_values is not None else 'None'}")
                 fig, ax = plt.subplots(figsize=(6, 3))
                 ax.text(0.5, 0.5, 'ACF no disponible', ha='center', va='center', color='white')
@@ -2052,6 +2093,16 @@ def server(input, output, session):
             historical = df[value_col].values
         else:
             historical = tslib_service.convert_to_numeric(df, value_col).values
+        
+        # Handle missing values in historical data (forward fill for plotting)
+        if np.any(np.isnan(historical)):
+            mask = np.isnan(historical)
+            indices = np.arange(len(historical))
+            if np.any(~mask):
+                historical[mask] = np.interp(indices[mask], indices[~mask], historical[~mask])
+            else:
+                historical = np.zeros_like(historical)
+        
         forecast = parallel_forecast_results.get('forecast', [])
         lower = parallel_forecast_results.get('lower_bound')
         upper = parallel_forecast_results.get('upper_bound')
@@ -2213,7 +2264,7 @@ def server(input, output, session):
             return
         
         try:
-            # Validate data using TSLib (handles conversion internally)
+            # Validate data using TSLib (handles conversion internally and missing values)
             validation_result = tslib_service.validate_data(df, value_col)
             
             # Get exploratory analysis (ACF/PACF)
@@ -2223,6 +2274,7 @@ def server(input, output, session):
             else:
                 data = tslib_service.convert_to_numeric(df, value_col).values
             
+            # Note: get_exploratory_analysis handles missing values internally
             exploratory = tslib_service.get_exploratory_analysis(data)
             
             # Update state
@@ -2301,6 +2353,9 @@ def server(input, output, session):
             else:
                 data = tslib_service.convert_to_numeric(df, value_col).values
             
+            # Note: Missing values will be handled by fit_model and other methods
+            # They use forward fill or interpolation for model fitting
+            
             # Get model parameters
             auto_select = input.auto_select() if hasattr(input, 'auto_select') else True
             forecast_steps = input.forecast_steps() if hasattr(input, 'forecast_steps') else 10
@@ -2355,20 +2410,23 @@ def server(input, output, session):
                 return_conf_int=include_conf
             )
             
-            # For ARIMA models, also fit parallel model
+            # DUMMY MODE: For ARIMA models, use dummy parallel model (commented out real parallel processing)
             parallel_workflow = None
             parallel_forecast_results = None
             if model_type == "ARIMA":
-                logger.info("ARIMA model selected, starting parallel model execution")
+                logger.info("DUMMY MODE: ARIMA model selected, using linear dummy parallel model")
                 logger.info(f"Data length: {len(data)}")
                 logger.info(f"Data type: {type(data)}")
                 
                 # Update log
                 new_state = app_state.get().copy()
-                new_state["execution_log"].append("Ajustando modelo ARIMA paralelo (esto puede tardar)...")
+                new_state["execution_log"].append("DUMMY: Ajustando modelo ARIMA paralelo (cálculos lineales)...")
                 app_state.set(new_state)
                 
                 try:
+                    # DUMMY: Use dummy parallel model instead of real Spark processing
+                    # Original parallel code commented below:
+                    """
                     logger.info("Attempting to import ParallelARIMAWorkflow...")
                     from tslib.spark import ParallelARIMAWorkflow
                     logger.info("ParallelARIMAWorkflow imported successfully")
@@ -2418,6 +2476,41 @@ def server(input, output, session):
                     error_msg = f"Error en modelo paralelo: {type(e).__name__}: {str(e)}"
                     logger.error(error_msg)
                     logger.error(f"Traceback: {traceback.format_exc()}")
+                    # Log error but don't fail the whole execution
+                    new_state = app_state.get().copy()
+                    new_state["execution_log"].append(f"⚠ {error_msg}")
+                    app_state.set(new_state)
+                    """
+                    
+                    # DUMMY: Use dummy parallel workflow (linear calculations)
+                    logger.info("DUMMY: Calling fit_parallel_arima (dummy mode)...")
+                    parallel_workflow = tslib_service.fit_parallel_arima(
+                        data=data,
+                        verbose=False
+                    )
+                    logger.info("DUMMY: Parallel ARIMA model fitted successfully")
+                    
+                    # Update log
+                    new_state = app_state.get().copy()
+                    new_state["execution_log"].append("DUMMY: Generando pronóstico (modelo paralelo - lineal)...")
+                    app_state.set(new_state)
+                    
+                    # Generate forecast for parallel model
+                    logger.info("DUMMY: Generating parallel forecast...")
+                    parallel_forecast_results = tslib_service.get_parallel_arima_forecast(
+                        workflow=parallel_workflow,
+                        steps=forecast_steps,
+                        return_conf_int=include_conf
+                    )
+                    logger.info("DUMMY: Parallel forecast generated successfully")
+                    
+                    new_state = app_state.get().copy()
+                    new_state["execution_log"].append("✓ DUMMY: Modelo paralelo completado (cálculos lineales)")
+                    app_state.set(new_state)
+                except Exception as e:
+                    error_msg = f"DUMMY: Error en modelo paralelo: {type(e).__name__}: {str(e)}"
+                    logger.error(error_msg)
+                    logger.error(f"DUMMY: Traceback: {traceback.format_exc()}")
                     # Log error but don't fail the whole execution
                     new_state = app_state.get().copy()
                     new_state["execution_log"].append(f"⚠ {error_msg}")
