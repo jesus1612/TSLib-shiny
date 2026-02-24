@@ -1,9 +1,9 @@
 """Shiny app entry point: TSLib time series analysis wizard."""
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend for Shiny
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import logging
 import traceback
 
@@ -789,23 +789,15 @@ app_ui = ui.page_fluid(
     ),
     
     
-    # Stepper header output
-    # ui.output_ui("stepper_header"),
-    # Stepper navigation output
     ui.output_ui("stepper_navigation"),
-    # Main content area
     ui.div(
-        # Step content will be rendered here
         ui.output_ui("step_content"),
         class_="container-fluid"
     )
 )
 
-# Define the server logic
 def server(input, output, session):
-    """Server logic with reactive event handling"""
-    
-    # Reactive values for app state
+    """Server logic with reactive event handling."""
     app_state = reactive.Value({
         "current_step": 0,
         "data_loaded": False,
@@ -822,7 +814,7 @@ def server(input, output, session):
         "analysis_complete": False,
         "execution_log": [],
         "exploratory_analysis": None,
-        "auto_select": True  # Store auto_select state to persist across re-renders
+        "auto_select": True
     })
     uploaded_dataframe = reactive.Value(None)
     
@@ -911,8 +903,6 @@ def server(input, output, session):
         elif current_step == 1:
             return render_visualization_ui()
         elif current_step == 2:
-            # Model selection now includes execution controls
-            # Use stored auto_select value to preserve user's choice
             auto_select_value = state.get("auto_select", True)
             return render_model_selection_ui(auto_select_value=auto_select_value)
         elif current_step == 3:
@@ -922,10 +912,9 @@ def server(input, output, session):
     
     @render.ui
     def model_type_select():
-        """Render model type select with state hydration to avoid resets"""
+        """Render model type select with state hydration."""
         state = app_state.get()
         current = state.get("model_type")
-        # If input already has a value (during same session), prefer it
         try:
             current_input = input.model_type() if hasattr(input, 'model_type') else None
         except Exception:
@@ -1141,7 +1130,6 @@ def server(input, output, session):
         if not state.get("data_validated"):
             return ui.div()
         
-        # Get validation report from state (should be set by validate_data handler)
         validation = state.get("validation_report", {})
         
         if not validation:
@@ -1259,7 +1247,6 @@ def server(input, output, session):
         analysis = state.get("exploratory_analysis")
         
         if analysis is None:
-            print("[DEBUG] ACF: exploratory_analysis is None")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'Valida los datos primero', ha='center', va='center', color='white')
             ax.set_xlim(0, 1)
@@ -1273,14 +1260,6 @@ def server(input, output, session):
         
         # Check if ACF values are empty or invalid
         if not acf_values or len(acf_values) == 0:
-            # Log data length if available
-            try:
-                df = uploaded_dataframe.get()
-                value_col = state.get("value_column")
-                n_obs_dbg = len(df[value_col]) if df is not None and value_col else 0
-            except Exception:
-                n_obs_dbg = -1
-            print(f"[DEBUG] ACF unavailable. len(acf)={len(acf_values) if acf_values is not None else 'None'}, n_obs={n_obs_dbg}")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'ACF no disponible\n(puede requerir más datos)', 
                    ha='center', va='center', color='white')
@@ -1332,7 +1311,6 @@ def server(input, output, session):
         analysis = state.get("exploratory_analysis")
         
         if analysis is None:
-            print("[DEBUG] PACF: exploratory_analysis is None")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'Valida los datos primero', ha='center', va='center', color='white')
             ax.set_xlim(0, 1)
@@ -1346,13 +1324,6 @@ def server(input, output, session):
         
         # Check if PACF values are empty or invalid
         if not pacf_values or len(pacf_values) == 0:
-            try:
-                df = uploaded_dataframe.get()
-                value_col = state.get("value_column")
-                n_obs_dbg = len(df[value_col]) if df is not None and value_col else 0
-            except Exception:
-                n_obs_dbg = -1
-            print(f"[DEBUG] PACF unavailable. len(pacf)={len(pacf_values) if pacf_values is not None else 'None'}, n_obs={n_obs_dbg}")
             fig, ax = plt.subplots(figsize=(6, 3))
             ax.text(0.5, 0.5, 'PACF no disponible\n(puede requerir más datos)', 
                    ha='center', va='center', color='white')
@@ -1399,32 +1370,9 @@ def server(input, output, session):
     
     @render.ui
     def acf_pacf_debug():
-        """Small debug readout for ACF/PACF availability"""
-        state = app_state.get()
-        analysis = state.get("exploratory_analysis")
-        df = uploaded_dataframe.get()
-        value_col = state.get("value_column")
-        try:
-            if df is not None and value_col:
-                # Try to get numeric and count NaNs
-                series_raw = df[value_col]
-                if pd.api.types.is_numeric_dtype(series_raw):
-                    series_num = series_raw
-                else:
-                    series_num = tslib_service.convert_to_numeric(df, value_col)
-                n_obs = len(series_num)
-                nan_count = int(series_num.isna().sum())
-            else:
-                n_obs = 0
-                nan_count = 0
-        except Exception:
-            n_obs = -1
-            nan_count = -1
-        acf_vals = analysis.get("acf", [])
-        pacf_vals = analysis.get("pacf", [])
-        acf_len = len(acf_vals) if acf_vals is not None else 0
-        pacf_len = len(pacf_vals) if pacf_vals is not None else 0
-    
+        """Placeholder for ACF/PACF debug readout (optional)."""
+        return ui.div()
+
     # Model selection renders
     @render.ui
     def model_description():
@@ -1586,8 +1534,6 @@ def server(input, output, session):
             class_="text-muted"
         )
     
-    # (debug UI removed)
-    
     @render.ui
     def execution_status_ui():
         """Show execution status"""
@@ -1693,7 +1639,6 @@ def server(input, output, session):
         forecast_results = state.get("forecast_results")
         
         if not forecast_results or df is None:
-            print(f"[DEBUG] forecast_plot: missing data. df_none={df is None}, forecast_none={forecast_results is None}")
             fig, ax = plt.subplots(figsize=(10, 4))
             ax.text(0.5, 0.5, 'No hay pronóstico disponible', ha='center', va='center')
             ax.axis('off')
@@ -1845,86 +1790,68 @@ def server(input, output, session):
             return fig
         
         residuals = fitted_model.get_residuals()
-        
-        # Calculate ACF of residuals
-        # NOTE: ACFCalculator.calculate() returns a tuple (lags, values), not just values
         try:
             from tslib.core.acf_pacf import ACFCalculator
             acf_calc = ACFCalculator()
-            
-            # Calculate ACF (returns tuple: lags, values)
             acf_result = acf_calc.calculate(residuals)
-            
-            # Extract values from tuple
             if isinstance(acf_result, tuple) and len(acf_result) == 2:
                 lags, acf_values = acf_result
             else:
-                # Fallback: assume it's the values directly
                 acf_values = acf_result
-            
-            # Convert to numpy array if needed
+
             if isinstance(acf_values, np.ndarray):
-                pass  # Already numpy array
+                pass
             elif isinstance(acf_values, list):
                 acf_values = np.array(acf_values)
             else:
-                acf_values = np.array(list(acf_values)) if hasattr(acf_values, '__iter__') else np.array([])
-            
-            # Truncate to reasonable length (max 20 lags)
+                acf_values = np.array(list(acf_values)) if hasattr(acf_values, "__iter__") else np.array([])
+
             if len(acf_values) > 20:
                 acf_values = acf_values[:20]
-            
-            # Check if we got valid values
+
             if acf_values is None or len(acf_values) == 0:
-                print(f"[DEBUG] Residuals ACF unavailable. len(residuals)={len(residuals)} len(acf)={len(acf_values) if acf_values is not None else 'None'}")
                 fig, ax = plt.subplots(figsize=(6, 3))
-                ax.text(0.5, 0.5, 'ACF no disponible', ha='center', va='center', color='white')
+                ax.text(0.5, 0.5, "ACF no disponible", ha="center", va="center", color="white")
                 ax.set_xlim(0, 1)
                 ax.set_ylim(0, 1)
-                ax.axis('off')
-                ax.set_facecolor('#2d2d2d')
-                fig.patch.set_facecolor('#1a1a1a')
+                ax.axis("off")
+                ax.set_facecolor("#2d2d2d")
+                fig.patch.set_facecolor("#1a1a1a")
                 return fig
-            
+
             fig, ax = plt.subplots(figsize=(6, 3))
-            ax.stem(range(len(acf_values)), acf_values, linefmt='#00d4aa', markerfmt='o', basefmt=' ')
-            ax.axhline(y=0, color='white', linestyle='-', linewidth=0.5)
-            
-            # Add confidence intervals if we have residuals
+            ax.stem(range(len(acf_values)), acf_values, linefmt="#00d4aa", markerfmt="o", basefmt=" ")
+            ax.axhline(y=0, color="white", linestyle="-", linewidth=0.5)
             if len(residuals) > 0:
                 conf_level = 1.96 / np.sqrt(len(residuals))
-                ax.axhline(y=conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
-                ax.axhline(y=-conf_level, color='red', linestyle='--', linewidth=1, alpha=0.7)
-            
-            ax.set_xlabel('Lag')
-            ax.set_ylabel('ACF')
-            ax.set_title('ACF de Residuos', fontsize=10, fontweight='bold')
+                ax.axhline(y=conf_level, color="red", linestyle="--", linewidth=1, alpha=0.7)
+                ax.axhline(y=-conf_level, color="red", linestyle="--", linewidth=1, alpha=0.7)
+            ax.set_xlabel("Lag")
+            ax.set_ylabel("ACF")
+            ax.set_title("ACF de Residuos", fontsize=10, fontweight="bold")
             ax.grid(True, alpha=0.3)
-            ax.set_facecolor('#2d2d2d')
-            fig.patch.set_facecolor('#1a1a1a')
-            ax.tick_params(colors='white')
-            ax.xaxis.label.set_color('white')
-            ax.yaxis.label.set_color('white')
-            ax.title.set_color('white')
-            ax.spines['bottom'].set_color('white')
-            ax.spines['left'].set_color('white')
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            
+            ax.set_facecolor("#2d2d2d")
+            fig.patch.set_facecolor("#1a1a1a")
+            ax.tick_params(colors="white")
+            ax.xaxis.label.set_color("white")
+            ax.yaxis.label.set_color("white")
+            ax.title.set_color("white")
+            ax.spines["bottom"].set_color("white")
+            ax.spines["left"].set_color("white")
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
             plt.tight_layout()
             return fig
         except Exception as e:
             fig, ax = plt.subplots(figsize=(6, 3))
-            ax.text(0.5, 0.5, f'Error al calcular ACF:\n{str(e)}', 
-                   ha='center', va='center', color='white', fontsize=9)
+            ax.text(0.5, 0.5, f"Error al calcular ACF:\n{str(e)}", ha="center", va="center", color="white", fontsize=9)
             ax.set_xlim(0, 1)
             ax.set_ylim(0, 1)
-            ax.axis('off')
-            ax.set_facecolor('#2d2d2d')
-            fig.patch.set_facecolor('#1a1a1a')
+            ax.axis("off")
+            ax.set_facecolor("#2d2d2d")
+            fig.patch.set_facecolor("#1a1a1a")
             return fig
-    
-    # Parallel ARIMA model renders
+
     @render.ui
     def linear_model_title():
         """Show linear model title only for ARIMA models"""
@@ -2424,108 +2351,32 @@ def server(input, output, session):
                 return_conf_int=include_conf
             )
             
-            # DUMMY MODE: For ARIMA models, use dummy parallel model (commented out real parallel processing)
             parallel_workflow = None
             parallel_forecast_results = None
             if model_type == "ARIMA":
-                logger.info("DUMMY MODE: ARIMA model selected, using linear dummy parallel model")
-                logger.info(f"Data length: {len(data)}")
-                logger.info(f"Data type: {type(data)}")
-                
-                # Update log
                 new_state = app_state.get().copy()
-                new_state["execution_log"].append("DUMMY: Ajustando modelo ARIMA paralelo (cálculos lineales)...")
+                new_state["execution_log"].append("Ajustando modelo ARIMA paralelo...")
                 app_state.set(new_state)
-                
                 try:
-                    # DUMMY: Use dummy parallel model instead of real Spark processing
-                    # Original parallel code commented below:
-                    """
-                    logger.info("Attempting to import ParallelARIMAWorkflow...")
-                    from tslib.spark import ParallelARIMAWorkflow
-                    logger.info("ParallelARIMAWorkflow imported successfully")
-                    
-                    # Fit parallel ARIMA model
-                    logger.info("Calling fit_parallel_arima...")
-                    parallel_workflow = tslib_service.fit_parallel_arima(
-                        data=data,
-                        verbose=False  # Set to False to avoid too much output in UI
-                    )
-                    logger.info("Parallel ARIMA model fitted successfully")
-                    
-                    # Update log
-                    new_state = app_state.get().copy()
-                    new_state["execution_log"].append("Generando pronóstico (modelo paralelo)...")
-                    app_state.set(new_state)
-                    
-                    # Generate forecast for parallel model
-                    logger.info("Generating parallel forecast...")
-                    parallel_forecast_results = tslib_service.get_parallel_arima_forecast(
-                        workflow=parallel_workflow,
-                        steps=forecast_steps,
-                        return_conf_int=include_conf
-                    )
-                    logger.info("Parallel forecast generated successfully")
-                    
-                    new_state = app_state.get().copy()
-                    new_state["execution_log"].append("✓ Modelo paralelo completado")
-                    app_state.set(new_state)
-                except ImportError as e:
-                    error_str = str(e)
-                    logger.error(f"Import error: {error_str}")
-                    logger.error(f"Traceback: {traceback.format_exc()}")
-                    
-                    # Provide specific guidance based on error
-                    if "PyArrow" in error_str or "pyarrow" in error_str.lower():
-                        error_msg = "PyArrow >= 11.0.0 es requerido. Instálalo con: pip install 'pyarrow>=11.0.0'"
-                    elif "pyspark" in error_str.lower():
-                        error_msg = "PySpark no está instalado. Instálalo con: pip install pyspark"
-                    else:
-                        error_msg = f"Error de importación: {error_str}"
-                    
-                    new_state = app_state.get().copy()
-                    new_state["execution_log"].append(f"⚠ {error_msg}")
-                    app_state.set(new_state)
-                except Exception as e:
-                    error_msg = f"Error en modelo paralelo: {type(e).__name__}: {str(e)}"
-                    logger.error(error_msg)
-                    logger.error(f"Traceback: {traceback.format_exc()}")
-                    # Log error but don't fail the whole execution
-                    new_state = app_state.get().copy()
-                    new_state["execution_log"].append(f"⚠ {error_msg}")
-                    app_state.set(new_state)
-                    """
-                    
-                    # DUMMY: Use dummy parallel workflow (linear calculations)
-                    logger.info("DUMMY: Calling fit_parallel_arima (dummy mode)...")
                     parallel_workflow = tslib_service.fit_parallel_arima(
                         data=data,
                         verbose=False
                     )
-                    logger.info("DUMMY: Parallel ARIMA model fitted successfully")
-                    
-                    # Update log
                     new_state = app_state.get().copy()
-                    new_state["execution_log"].append("DUMMY: Generando pronóstico (modelo paralelo - lineal)...")
+                    new_state["execution_log"].append("Generando pronóstico (modelo paralelo)...")
                     app_state.set(new_state)
-                    
-                    # Generate forecast for parallel model
-                    logger.info("DUMMY: Generating parallel forecast...")
                     parallel_forecast_results = tslib_service.get_parallel_arima_forecast(
                         workflow=parallel_workflow,
                         steps=forecast_steps,
                         return_conf_int=include_conf
                     )
-                    logger.info("DUMMY: Parallel forecast generated successfully")
-                    
                     new_state = app_state.get().copy()
-                    new_state["execution_log"].append("✓ DUMMY: Modelo paralelo completado (cálculos lineales)")
+                    new_state["execution_log"].append("✓ Modelo paralelo completado")
                     app_state.set(new_state)
                 except Exception as e:
-                    error_msg = f"DUMMY: Error en modelo paralelo: {type(e).__name__}: {str(e)}"
+                    error_msg = f"Error en modelo paralelo: {type(e).__name__}: {str(e)}"
                     logger.error(error_msg)
-                    logger.error(f"DUMMY: Traceback: {traceback.format_exc()}")
-                    # Log error but don't fail the whole execution
+                    logger.error(traceback.format_exc())
                     new_state = app_state.get().copy()
                     new_state["execution_log"].append(f"⚠ {error_msg}")
                     app_state.set(new_state)
@@ -2589,8 +2440,6 @@ def server(input, output, session):
             
             df_export = pd.DataFrame(export_data)
             
-            # Note: In a real Shiny app, you would use ui.download_button
-            # For now, just show a notification
             ui.notification_show(
                 "Funcionalidad de exportación preparada (requiere configuración adicional)",
                 type="message",

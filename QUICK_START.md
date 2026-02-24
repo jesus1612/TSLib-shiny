@@ -28,26 +28,20 @@ Abrir navegador en: **http://localhost:8000**
 python test_tslib_integration.py
 ```
 
-## Flujo Básico de Uso
+## Flujo (4 pasos)
 
-1. **📁 Subir Archivo** → CSV o Excel
-2. **🎯 Seleccionar Columna** → Valores de serie temporal
-3. **✅ Validar Datos** → Click en "Validar Datos"
-4. **➡️ Siguiente** → Ir a Visualización
-5. **📊 Ver Gráficos** → Serie temporal, ACF, PACF
-6. **➡️ Siguiente** → Ir a Selección de Modelo
-7. **🤖 Elegir Modelo** → AR, MA, ARMA o ARIMA
-8. **⚙️ Configurar** → Auto-selección o manual
-9. **➡️ Siguiente** → Ir a Ejecución
-10. **▶️ Iniciar Análisis** → Ajustar modelo
-11. **➡️ Siguiente** → Ir a Resultados
-12. **📈 Ver Resultados** → Métricas, pronóstico, diagnósticos
+1. **📁 Carga** – Subir CSV/Excel, elegir columna de valores (y opcional fecha), validar datos → Siguiente
+2. **📊 Exploración** – Ver serie, estadísticas, ACF/PACF → Siguiente
+3. **⚙️ Modelo y ejecución** – Elegir AR/MA/ARMA/ARIMA, configurar (auto o manual), "Ajustar y pronosticar" → Siguiente
+4. **📈 Resultados** – Métricas, pronóstico, diagnósticos, exportar
 
 ## Datos de Ejemplo
 
-Usa los archivos en `data/examples/`:
-- `sales.csv` - Datos de ventas
-- `temperature.csv` - Datos de temperatura
+En `data/examples/`:
+- `sales.csv` – ventas
+- `temperature.csv` – temperatura
+- `dummy_with_missing.csv` – serie con valores faltantes (para probar imputación)
+- `generate_dummy_data.py` – script para generar más datos de prueba
 
 ## Modelos Disponibles
 
@@ -85,11 +79,11 @@ pip install pyspark
 - Verifica que seleccionaste una columna de valores
 - Asegúrate de haber validado los datos primero
 
-## Documentación Completa
+## Documentación
 
-- **`INTEGRATION_README.md`** - Guía detallada de uso
-- **`IMPLEMENTATION_SUMMARY.md`** - Resumen técnico de la implementación
-- **TSLib README** - Ver `README.md` en el repositorio time-series-library
+- **`README.md`** – Visión general e integración con TSLib
+- **`INTEGRATION_README.md`** – Guía detallada de uso y estado
+- **TSLib** – Ver `README.md` en el repositorio time-series-library
 
 ## Características Principales
 

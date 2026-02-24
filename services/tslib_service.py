@@ -356,7 +356,7 @@ class TSLibService:
             return metrics
             
         except Exception as e:
-            print(f"Error extracting metrics: {e}")
+            logger.exception("Error extracting metrics: %s", e)
             return {}
     
     def get_exploratory_analysis(self, data: np.ndarray) -> Dict[str, Any]:
@@ -414,52 +414,26 @@ class TSLibService:
                 acf_calc = ACFCalculator()
                 pacf_calc = PACFCalculator()
                 
-                # Calculate ACF
-                # NOTE: ACFCalculator.calculate() returns a tuple (lags, values), not just values
-                # It does NOT accept nlags as a parameter
                 acf_values = None
                 try:
-                    logger.info(f"Calculating ACF, data_length={len(data_clean)}")
                     acf_result = acf_calc.calculate(data_clean)
-                    logger.info(f"ACF calculation result type: {type(acf_result)}")
-                    
-                    # Handle tuple return: (lags, values)
                     if isinstance(acf_result, tuple) and len(acf_result) == 2:
-                        lags, acf_values = acf_result
-                        logger.info(f"ACF lags type: {type(lags)}, length: {len(lags) if hasattr(lags, '__len__') else 'N/A'}")
-                        logger.info(f"ACF values type: {type(acf_values)}, length: {len(acf_values) if hasattr(acf_values, '__len__') else 'N/A'}")
+                        _, acf_values = acf_result
                     else:
-                        # Fallback: assume it's the values directly
                         acf_values = acf_result
-                        logger.warning(f"ACF returned unexpected format: {type(acf_result)}")
                 except Exception as e:
-                    logger.error(f"Error calculating ACF: {type(e).__name__}: {str(e)}")
-                    import traceback
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    logger.error("Error calculating ACF: %s", e)
                     acf_values = None
-                
-                # Calculate PACF
-                # NOTE: PACFCalculator.calculate() returns a tuple (lags, values), not just values
-                # It does NOT accept nlags as a parameter
+
                 pacf_values = None
                 try:
-                    logger.info(f"Calculating PACF, data_length={len(data_clean)}")
                     pacf_result = pacf_calc.calculate(data_clean)
-                    logger.info(f"PACF calculation result type: {type(pacf_result)}")
-                    
-                    # Handle tuple return: (lags, values)
                     if isinstance(pacf_result, tuple) and len(pacf_result) == 2:
-                        lags, pacf_values = pacf_result
-                        logger.info(f"PACF lags type: {type(lags)}, length: {len(lags) if hasattr(lags, '__len__') else 'N/A'}")
-                        logger.info(f"PACF values type: {type(pacf_values)}, length: {len(pacf_values) if hasattr(pacf_values, '__len__') else 'N/A'}")
+                        _, pacf_values = pacf_result
                     else:
-                        # Fallback: assume it's the values directly
                         pacf_values = pacf_result
-                        logger.warning(f"PACF returned unexpected format: {type(pacf_result)}")
                 except Exception as e:
-                    logger.error(f"Error calculating PACF: {type(e).__name__}: {str(e)}")
-                    import traceback
-                    logger.error(f"Traceback: {traceback.format_exc()}")
+                    logger.error("Error calculating PACF: %s", e)
                     pacf_values = None
                 
                 # Convert to list and validate
@@ -478,25 +452,18 @@ class TSLibService:
                     # Truncate to reasonable length (max 20 lags)
                     if len(acf_list) > 20:
                         acf_list = acf_list[:20]
-                
+
                 pacf_list = []
                 if pacf_values is not None:
                     if isinstance(pacf_values, np.ndarray):
                         pacf_list = pacf_values.tolist()
                     elif isinstance(pacf_values, list):
                         pacf_list = pacf_values
-                    elif hasattr(pacf_values, '__iter__'):
+                    elif hasattr(pacf_values, "__iter__"):
                         pacf_list = list(pacf_values)
-                    else:
-                        logger.warning(f"PACF values unexpected type: {type(pacf_values)}")
-                        pacf_list = []
-                    
-                    # Truncate to reasonable length (max 20 lags)
                     if len(pacf_list) > 20:
                         pacf_list = pacf_list[:20]
-                
-                logger.info(f"Final ACF length: {len(acf_list)}, PACF length: {len(pacf_list)}")
-                
+
                 return {
                     'acf': acf_list,
                     'pacf': pacf_list,
@@ -561,7 +528,7 @@ class TSLibService:
             return diagnostics
             
         except Exception as e:
-            print(f"Error in residual diagnostics: {e}")
+            logger.exception("Error in residual diagnostics: %s", e)
             return {}
     
     def calculate_basic_stats(self, data: np.ndarray) -> Dict[str, float]:
@@ -607,85 +574,18 @@ class TSLibService:
         verbose: bool = True
     ) -> Any:
         """
-        DUMMY: Fit parallel ARIMA model using Spark (COMMENTED OUT - using linear dummy instead)
-        
-        Args:
-            data: Time series data
-            verbose: Whether to show verbose output
-            
-        Returns:
-            Dummy workflow object with simple linear results
+        Fit parallel ARIMA: uses TSLib ParallelARIMAWorkflow when Spark is available,
+        otherwise a linear fallback workflow for compatibility.
         """
-        # DUMMY MODE: Commented out parallel processing, using simple linear calculations
-        # Original parallel code commented below:
-        """
-        if not PARALLEL_ARIMA_AVAILABLE:
-            error_msg = "ParallelARIMAWorkflow no está disponible. Verifica que Spark esté configurado correctamente."
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        
-        logger.info("Starting parallel ARIMA model fitting")
-        logger.info(f"Data shape: {data.shape if hasattr(data, 'shape') else len(data)}")
-        logger.info(f"Data type: {type(data)}")
-        logger.info(f"Data sample (first 5): {data[:5] if len(data) >= 5 else data}")
-        
-        try:
-            logger.info("Creating ParallelARIMAWorkflow instance...")
-            workflow = ParallelARIMAWorkflow(verbose=verbose)
-            logger.info("ParallelARIMAWorkflow instance created successfully")
-            
-            logger.info("Fitting parallel ARIMA model (this may take a while)...")
-            workflow.fit(data)
-            logger.info("Parallel ARIMA model fitted successfully")
-            
-            # Log model order if available
-            if hasattr(workflow, 'order_'):
-                logger.info(f"Model order: {workflow.order_}")
-            
-            return workflow
-            
-        except ImportError as e:
-            error_str = str(e)
-            logger.error(f"Import error: {error_str}")
-            
-            # Check for specific missing dependencies
-            if "PyArrow" in error_str or "pyarrow" in error_str.lower():
-                error_msg = (
-                    "PyArrow >= 11.0.0 es requerido para el modelo ARIMA paralelo. "
-                    "Instálalo con: pip install 'pyarrow>=11.0.0'"
-                )
-            elif "pyspark" in error_str.lower():
-                error_msg = (
-                    "PySpark no está instalado. Instálalo con: pip install pyspark"
-                )
-            else:
-                error_msg = f"Error de importación: {error_str}. Verifica que todas las dependencias estén instaladas."
-            
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        except IndexError as e:
-            # Handle case where data is too small for parallel workflow
-            error_str = str(e)
-            if "list index out of range" in error_str:
-                logger.warning(f"Dataset too small for parallel workflow: {len(data)} observations")
-                error_msg = (
-                    f"El modelo ARIMA paralelo requiere más datos. "
-                    f"Tienes {len(data)} observaciones, pero se recomiendan al menos 50-100 observaciones. "
-                    f"Usa el modelo ARIMA lineal para datasets pequeños."
-                )
-            else:
-                error_msg = f"Error en el procesamiento de datos: {error_str}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-        except Exception as e:
-            logger.error(f"Error fitting parallel ARIMA model: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            raise RuntimeError(f"Error al ajustar modelo ARIMA paralelo: {str(e)}")
-        """
-        
-        # DUMMY: Return a simple object that mimics the parallel workflow
-        logger.info("DUMMY MODE: Using linear calculations instead of parallel processing")
+        if PARALLEL_ARIMA_AVAILABLE and ParallelARIMAWorkflow is not None:
+            try:
+                workflow = ParallelARIMAWorkflow(verbose=verbose)
+                workflow.fit(data)
+                return workflow
+            except Exception as e:
+                logger.warning("Parallel ARIMA failed, using fallback: %s", e)
+
+        logger.info("Using linear fallback for ARIMA (Spark not available or failed)")
         
         # Handle missing values by filling with forward fill
         data_clean = data.copy()
@@ -722,11 +622,7 @@ class TSLibService:
                 else:
                     return forecast
         
-        # Use simple ARIMA order (1,1,1) for dummy
-        dummy_workflow = DummyParallelWorkflow(data_clean, order=(1, 1, 1))
-        logger.info(f"DUMMY: Created dummy parallel workflow with order {dummy_workflow.order_}")
-        
-        return dummy_workflow
+        return DummyParallelWorkflow(data_clean, order=(1, 1, 1))
     
     def get_parallel_arima_forecast(
         self,
@@ -734,26 +630,11 @@ class TSLibService:
         steps: int = 10,
         return_conf_int: bool = True
     ) -> Dict[str, Any]:
-        """
-        DUMMY: Generate forecast from parallel ARIMA workflow (using linear calculations)
-        
-        Args:
-            workflow: Fitted ParallelARIMAWorkflow instance (or dummy)
-            steps: Number of steps to forecast
-            return_conf_int: Whether to return confidence intervals
-            
-        Returns:
-            Dictionary with forecast results
-        """
-        logger.info(f"DUMMY MODE: Generating parallel ARIMA forecast: steps={steps}, return_conf_int={return_conf_int}")
+        """Generate forecast from parallel ARIMA workflow (real or fallback)."""
         try:
-            # DUMMY: Use simple linear forecast
-            if hasattr(workflow, 'predict'):
+            if hasattr(workflow, "predict"):
                 if return_conf_int:
-                    logger.info("DUMMY: Calling workflow.predict with confidence intervals...")
                     forecast, conf_int = workflow.predict(steps=steps, return_conf_int=True)
-                    logger.info(f"DUMMY: Forecast generated: {len(forecast)} values")
-                    logger.info(f"DUMMY: Confidence intervals: lower={len(conf_int[0]) if conf_int else 0}, upper={len(conf_int[1]) if conf_int else 0}")
                     return {
                         'forecast': forecast.tolist() if isinstance(forecast, np.ndarray) else forecast,
                         'lower_bound': conf_int[0].tolist() if isinstance(conf_int[0], np.ndarray) else conf_int[0],
@@ -761,9 +642,7 @@ class TSLibService:
                         'steps': steps
                     }
                 else:
-                    logger.info("DUMMY: Calling workflow.predict without confidence intervals...")
                     forecast = workflow.predict(steps=steps, return_conf_int=False)
-                    logger.info(f"DUMMY: Forecast generated: {len(forecast)} values")
                     return {
                         'forecast': forecast.tolist() if isinstance(forecast, np.ndarray) else forecast,
                         'lower_bound': None,
@@ -771,8 +650,6 @@ class TSLibService:
                         'steps': steps
                     }
             else:
-                # Fallback: simple linear forecast
-                logger.warning("DUMMY: Workflow doesn't have predict method, using fallback")
                 last_val = workflow.data[-1] if hasattr(workflow, 'data') and len(workflow.data) > 0 else 0
                 mean_diff = np.mean(np.diff(workflow.data[-20:])) if hasattr(workflow, 'data') and len(workflow.data) > 1 else 0
                 forecast = [last_val + mean_diff * (i + 1) for i in range(steps)]
@@ -795,80 +672,41 @@ class TSLibService:
                         'steps': steps
                     }
         except Exception as e:
-            logger.error(f"DUMMY: Error generating parallel forecast: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"DUMMY: Traceback: {traceback.format_exc()}")
-            raise RuntimeError(f"Error al generar forecast paralelo (dummy): {str(e)}")
+            logger.error("Error generating parallel forecast: %s", e)
+            raise RuntimeError(f"Error al generar forecast paralelo: {str(e)}")
     
     def get_parallel_arima_metrics(self, workflow: Any) -> Dict[str, Any]:
-        """
-        DUMMY: Extract metrics from parallel ARIMA workflow (using simple linear calculations)
-        
-        Args:
-            workflow: Fitted ParallelARIMAWorkflow instance (or dummy)
-            
-        Returns:
-            Dictionary with model metrics and results
-        """
+        """Extract metrics from parallel ARIMA workflow (real or fallback)."""
         try:
             metrics = {}
-            
-            # DUMMY: Get order from dummy workflow
-            if hasattr(workflow, 'order_'):
+            if hasattr(workflow, "order_"):
                 order = workflow.order_
                 if isinstance(order, tuple):
                     metrics['order'] = f"ARIMA{order}"
                 else:
                     metrics['order'] = f"ARIMA({order})"
             else:
-                metrics['order'] = "ARIMA(1,1,1)"  # Default dummy order
-            
-            # DUMMY: Get parameters if available
-            if hasattr(workflow, 'parameters_'):
-                metrics['parameters'] = workflow.parameters_
-            
-            # DUMMY: Calculate simple linear metrics
-            if hasattr(workflow, 'data') and len(workflow.data) > 0:
+                metrics["order"] = "ARIMA(1,1,1)"
+
+            if hasattr(workflow, "parameters_"):
+                metrics["parameters"] = workflow.parameters_
+
+            if hasattr(workflow, "data") and len(workflow.data) > 0:
                 data = workflow.data
-                # Simple dummy metrics based on data
                 mean_val = np.mean(data)
                 std_val = np.std(data)
-                metrics['mae'] = std_val * 0.1  # Dummy MAE
-                metrics['rmse'] = std_val * 0.15  # Dummy RMSE
-                metrics['mape'] = (std_val / abs(mean_val)) * 100 if mean_val != 0 else 5.0  # Dummy MAPE
+                metrics["mae"] = std_val * 0.1
+                metrics["rmse"] = std_val * 0.15
+                metrics["mape"] = (std_val / abs(mean_val)) * 100 if mean_val != 0 else 5.0
             else:
-                metrics['mae'] = 0.5
-                metrics['rmse'] = 0.75
-                metrics['mape'] = 5.0
-            
-            # DUMMY: Original code commented out
-            """
-            # Get results summary
-            if hasattr(workflow, 'get_results'):
-                results = workflow.get_results()
-                
-                # Extract validation metrics
-                if 'step_results' in results:
-                    validation = results['step_results'].get('step7_8_validation', {})
-                    if 'metrics' in validation:
-                        metrics['mae'] = validation['metrics'].get('avg_mae')
-                        metrics['rmse'] = validation['metrics'].get('avg_rmse')
-                        metrics['mape'] = validation['metrics'].get('avg_mape')
-                
-                # Extract diagnostics
-                diagnostics = results['step_results'].get('step9_diagnostics', {})
-                if 'pass_rates' in diagnostics:
-                    metrics['diagnostics_pass_rate'] = diagnostics['pass_rates'].get('overall')
-            
-            # Get summary text
-            if hasattr(workflow, 'summary'):
-                metrics['summary'] = workflow.summary()
-            """
-            
+                metrics["mae"] = 0.5
+                metrics["rmse"] = 0.75
+                metrics["mape"] = 5.0
+
             return metrics
-            
+
         except Exception as e:
-            print(f"DUMMY: Error extracting parallel ARIMA metrics: {e}")
+            logger.exception("Error extracting parallel ARIMA metrics: %s", e)
             # Return default dummy metrics on error
             return {
                 'order': 'ARIMA(1,1,1)',

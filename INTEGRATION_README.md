@@ -58,7 +58,7 @@ La aplicación estará disponible en: `http://localhost:8000`
 - **Estadísticas básicas**: Media, desviación estándar, mínimo, máximo
 - **ACF y PACF**: Análisis de autocorrelación para identificar patrones
 
-### Paso 3: Selección de Modelo ⚙️
+### Paso 3: Modelo y ejecución ⚙️
 
 1. **Elegir tipo de modelo**:
    - **AR**: Para series con persistencia (valores pasados influyen)
@@ -74,19 +74,9 @@ La aplicación estará disponible en: `http://localhost:8000`
    - Pasos a pronosticar (default: 10)
    - Incluir intervalos de confianza
 
-### Paso 4: Ejecución 🚀
+La **ejecución** (ajustar modelo y pronóstico) se realiza en el **Paso 3** (Modelo y ejecución), con el botón "Ajustar y pronosticar". El proceso incluye: ajuste del modelo TSLib, generación de pronósticos y, para ARIMA, opcionalmente el modelo paralelo (Spark o fallback lineal).
 
-1. **Revisar configuración**: Resumen del modelo y datos seleccionados
-2. **Iniciar análisis**: El modelo TSLib se ajustará a tus datos
-3. **Monitorear progreso**: Log en tiempo real del proceso
-
-El proceso incluye:
-- Ajuste del modelo con datos históricos
-- Estimación de parámetros mediante MLE
-- Generación de pronósticos
-- Cálculo de diagnósticos
-
-### Paso 5: Resultados 📈
+### Paso 4: Resultados 📈
 
 **Información del Modelo:**
 - Tipo de modelo ajustado
@@ -107,9 +97,7 @@ El proceso incluye:
 
 **Exportar:** Botón para exportar resultados a CSV
 
-### Paso 6: Reportes 📄
-
-Funcionalidad para generar reportes completos (en desarrollo).
+Los **reportes** (generar reporte / PDF) están en desarrollo; la UI está en `features/reports/ui.py` pero no forma parte del stepper actual.
 
 ## Arquitectura de la Integración
 
@@ -147,7 +135,7 @@ metrics = service.get_model_metrics(model)
 
 ```python
 app_state = {
-    "current_step": int,          # 0-5
+    "current_step": int,          # 0-3 (4 pasos)
     "data_loaded": bool,
     "data_validated": bool,
     "uploaded_data": dict,
@@ -155,8 +143,10 @@ app_state = {
     "date_column": str,
     "model_type": str,            # AR, MA, ARMA, ARIMA
     "model_config": dict,
-    "fitted_model": Model,        # Instancia del modelo ajustado
+    "fitted_model": Model,
     "forecast_results": dict,
+    "parallel_workflow": Any,     # Solo para ARIMA (real o fallback)
+    "parallel_forecast_results": dict,
     "analysis_complete": bool,
     "execution_log": list,
     "exploratory_analysis": dict  # ACF/PACF
@@ -165,14 +155,10 @@ app_state = {
 
 ### Validación de Pasos
 
-Cada paso valida requisitos antes de permitir avanzar:
-
-- **Paso 0 → 1**: Datos cargados, columna seleccionada, validación exitosa
+- **Paso 0 → 1**: Datos cargados, columna de valores seleccionada, validación exitosa
 - **Paso 1 → 2**: Datos validados
-- **Paso 2 → 3**: Modelo configurado
-- **Paso 3 → 4**: Modelo configurado
-- **Paso 4 → 5**: Análisis completo
-- **Paso 5 → 6**: Análisis completo
+- **Paso 2 → 3**: Análisis completado (modelo ajustado en el mismo paso 2)
+- **Paso 3**: Resultados (solo lectura)
 
 ## Modelos TSLib Soportados
 
@@ -282,23 +268,12 @@ forecast = model.predict(steps=10, return_conf_int=True)
 - Estado reactivo
 - Notificaciones
 
-## Próximos Pasos Sugeridos
-
-1. **Exportación de Resultados**: Implementar descarga real de CSV
-2. **Reportes PDF**: Generar reportes completos en PDF
-3. **Más Gráficos**: Q-Q plot, CUSUM, etc.
-4. **Comparación de Modelos**: Ajustar múltiples modelos y comparar
-5. **Tests Estadísticos**: Ljung-Box, Jarque-Bera, etc.
-6. **Persistencia**: Guardar/cargar sesiones de análisis
-7. **Datasets de Ejemplo**: Incluir datasets precargados
-
 ## Notas Técnicas
 
-- La aplicación usa matplotlib con backend 'Agg' para Shiny
-- Todos los gráficos usan el tema oscuro de la aplicación
-- Los estados son reactivos y se actualizan automáticamente
-- PySpark está instalado pero no se usa (dependencia de TSLib)
-- La validación de pasos previene avance sin completar requisitos
+- Matplotlib se usa con backend `Agg` para Shiny.
+- Gráficos con tema oscuro de la app.
+- Estados reactivos; la validación de pasos impide avanzar sin cumplir requisitos.
+- **ARIMA paralelo**: si PySpark y Java están disponibles, se usa `ParallelARIMAWorkflow` de TSLib; si no, un flujo lineal de respaldo (sin Spark) permite seguir usando ARIMA.
 
 ## Soporte
 
