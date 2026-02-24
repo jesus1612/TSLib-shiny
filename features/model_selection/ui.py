@@ -2,8 +2,12 @@
 from shiny import ui
 from components.layout import create_card, create_form_group
 
-def render_model_selection_ui() -> ui.Tag:
-    """Render model selection step UI components"""
+def render_model_selection_ui(auto_select_value: bool = True) -> ui.Tag:
+    """Render model selection step UI components
+    
+    Args:
+        auto_select_value: Initial value for the auto_select switch (default: True)
+    """
     
     return create_card(
         title="⚙️ Modelo y ejecución",
@@ -18,7 +22,7 @@ def render_model_selection_ui() -> ui.Tag:
             ),
             # Auto-selection switch
             ui.div(
-                ui.input_switch("auto_select", "Selección automática de orden", value=True),
+                ui.input_switch("auto_select", "Selección automática de orden", value=auto_select_value),
                 ui.tags.p("Activar para que el modelo seleccione automáticamente los parámetros óptimos", class_="text-muted"),
                 class_="mb-4"
             ),

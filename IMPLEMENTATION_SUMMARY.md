@@ -244,13 +244,13 @@ La integración es robusta y maneja diferencias en la API de TSLib:
 
 ```bash
 # 1. Navegar al directorio
-cd /Users/genaromelgar/escom/TT/tslib-shiny-app
+cd /path/to/tslib-shiny-app
 
 # 2. Activar entorno virtual
 source venv/bin/activate
 
 # 3. Instalar TSLib
-pip install -e /Users/genaromelgar/escom/TT/time-series-library
+pip install -e /path/to/time-series-library
 
 # 4. Instalar dependencias adicionales
 pip install openpyxl pyspark

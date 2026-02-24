@@ -1,4 +1,4 @@
-# Service layer for TSLib integration
+"""Service layer: TSLib validation, model fit, forecast, exploratory analysis."""
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any
@@ -11,10 +11,8 @@ import logging
 from tslib import ARModel, MAModel, ARMAModel, ARIMAModel
 from tslib.preprocessing.validation import DataValidator
 
-# Setup logger
 logger = logging.getLogger(__name__)
 
-# Try to import ParallelARIMAWorkflow and check Spark availability
 PARALLEL_ARIMA_AVAILABLE = False
 SPARK_CHECKED = False
 SPARK_AVAILABLE = False
@@ -24,7 +22,6 @@ try:
     from tslib.spark import ParallelARIMAWorkflow
     from tslib.utils.checks import check_spark_availability
     
-    # Check if Spark is actually available (not just imported)
     SPARK_AVAILABLE = check_spark_availability()
     PARALLEL_ARIMA_AVAILABLE = SPARK_AVAILABLE
     SPARK_CHECKED = True
@@ -60,20 +57,15 @@ class TSLibService:
             Dictionary with validation results and messages
         """
         try:
-            # Extract the series and convert to numeric if needed
             if pd.api.types.is_numeric_dtype(df[column]):
                 data = df[column].values
             else:
-                # Try to convert from string format (currency, etc.)
                 data = self.convert_to_numeric(df, column).values
-            
-            # Validate using TSLib
+
             is_valid = self.validator.validate(data)
-            
             messages = []
             warnings = []
-            
-            # Basic checks
+
             if np.any(np.isnan(data)):
                 missing_count = np.sum(np.isnan(data))
                 missing_pct = (missing_count / len(data)) * 100
@@ -85,7 +77,6 @@ class TSLibService:
             if np.any(np.isinf(data)):
                 warnings.append("Valores infinitos detectados")
             
-            # Check for outliers using IQR method
             q1 = np.percentile(data[~np.isnan(data)], 25)
             q3 = np.percentile(data[~np.isnan(data)], 75)
             iqr = q3 - q1
@@ -244,10 +235,9 @@ class TSLibService:
             Fitted model instance
         """
         try:
-            # Handle missing values: forward fill for model fitting
+            # Impute missing values (forward fill) before fitting; TSLib does not accept NaN
             data_clean = data.copy()
             if np.any(np.isnan(data_clean)):
-                # Forward fill missing values
                 mask = np.isnan(data_clean)
                 indices = np.arange(len(data_clean))
                 if np.any(~mask):  # If there are any non-NaN values
@@ -287,7 +277,6 @@ class TSLibService:
             else:
                 raise ValueError(f"Modelo no soportado: {model_type}")
             
-            # Fit the model with cleaned data
             model.fit(data_clean)
             
             return model

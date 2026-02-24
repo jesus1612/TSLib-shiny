@@ -14,9 +14,9 @@ Se ha integrado exitosamente la librería TSLib en la aplicación Shiny para an�
 ### 1. Instalar TSLib
 
 ```bash
-cd /Users/genaromelgar/escom/TT/tslib-shiny-app
+cd /path/to/tslib-shiny-app
 source venv/bin/activate
-pip install -e /Users/genaromelgar/escom/TT/time-series-library
+pip install -e /path/to/time-series-library
 ```
 
 ### 2. Instalar dependencias adicionales
@@ -30,7 +30,7 @@ pip install openpyxl pyspark
 ## Ejecución
 
 ```bash
-cd /Users/genaromelgar/escom/TT/tslib-shiny-app
+cd /path/to/tslib-shiny-app
 source venv/bin/activate
 python app.py
 ```

@@ -4,11 +4,11 @@
 
 ```bash
 # 1. Activar entorno virtual
-cd /Users/genaromelgar/escom/TT/tslib-shiny-app
+cd /path/to/tslib-shiny-app
 source venv/bin/activate
 
-# 2. Instalar TSLib
-pip install -e /Users/genaromelgar/escom/TT/time-series-library
+# 2. Instalar TSLib (ajusta la ruta a tu clon de time-series-library)
+pip install -e /path/to/time-series-library
 
 # 3. Instalar dependencias faltantes
 pip install openpyxl pyspark
@@ -62,7 +62,7 @@ Usa los archivos en `data/examples/`:
 
 ### Error: ModuleNotFoundError: No module named 'tslib'
 ```bash
-pip install -e /Users/genaromelgar/escom/TT/time-series-library
+pip install -e /path/to/time-series-library
 ```
 
 ### Error: ModuleNotFoundError: No module named 'openpyxl'
@@ -89,7 +89,7 @@ pip install pyspark
 
 - **`INTEGRATION_README.md`** - Guía detallada de uso
 - **`IMPLEMENTATION_SUMMARY.md`** - Resumen técnico de la implementación
-- **TSLib README** - Ver `/Users/genaromelgar/escom/TT/time-series-library/README.md`
+- **TSLib README** - Ver `README.md` en el repositorio time-series-library
 
 ## Características Principales
 

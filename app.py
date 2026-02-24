@@ -1,4 +1,4 @@
-# Main Shiny application for TSLib Time Series Analysis
+"""Shiny app entry point: TSLib time series analysis wizard."""
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -9,7 +9,6 @@ import traceback
 
 from shiny import App, ui, reactive, render
 
-# Setup logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
@@ -22,10 +21,8 @@ from features.visualization.ui import render_visualization_ui
 from features.model_selection.ui import render_model_selection_ui
 from features.results.ui import render_results_ui
 
-# Import TSLib service
 from services.tslib_service import TSLibService
 
-# Define the steps for the wizard (simplified to 4, sentence case)
 STEPS = [
     {
         "title": "📁 Carga de datos",
@@ -45,12 +42,9 @@ STEPS = [
     }
 ]
 
-# Initialize stepper component
 stepper = StepperComponent(STEPS)
 
-# Define the UI
 app_ui = ui.page_fluid(
-    # Include custom CSS inline
     ui.tags.head(
         ui.tags.style(
             """
@@ -827,7 +821,8 @@ def server(input, output, session):
         "parallel_forecast_results": None,
         "analysis_complete": False,
         "execution_log": [],
-        "exploratory_analysis": None
+        "exploratory_analysis": None,
+        "auto_select": True  # Store auto_select state to persist across re-renders
     })
     uploaded_dataframe = reactive.Value(None)
     
@@ -909,6 +904,7 @@ def server(input, output, session):
     def step_content():
         """Render content for current step"""
         current_step = app_state.get()["current_step"]
+        state = app_state.get()
         
         if current_step == 0:
             return render_upload_ui()
@@ -916,7 +912,9 @@ def server(input, output, session):
             return render_visualization_ui()
         elif current_step == 2:
             # Model selection now includes execution controls
-            return render_model_selection_ui()
+            # Use stored auto_select value to preserve user's choice
+            auto_select_value = state.get("auto_select", True)
+            return render_model_selection_ui(auto_select_value=auto_select_value)
         elif current_step == 3:
             return render_results_ui()
         else:
@@ -2316,6 +2314,22 @@ def server(input, output, session):
                 new_state["parallel_workflow"] = None
                 new_state["parallel_forecast_results"] = None
                 app_state.set(new_state)
+        except Exception as e:
+            # If there's an error getting the value, don't update state
+            pass
+    
+    @reactive.effect
+    @reactive.event(input.auto_select)
+    def handle_auto_select_change():
+        """Handle auto_select switch change and persist in state"""
+        if not hasattr(input, 'auto_select'):
+            return
+        
+        try:
+            auto_select_value = input.auto_select()
+            new_state = app_state.get().copy()
+            new_state["auto_select"] = auto_select_value
+            app_state.set(new_state)
         except Exception as e:
             # If there's an error getting the value, don't update state
             pass
