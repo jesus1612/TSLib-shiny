@@ -2,46 +2,51 @@
 from shiny import ui
 from components.layout import create_card, create_form_group
 
-def render_model_selection_ui() -> ui.Tag:
-    """Render model selection step UI components"""
+def render_model_selection_ui(auto_select_value: bool = True) -> ui.Tag:
+    """Render model selection step UI components
+    
+    Args:
+        auto_select_value: Initial value for the auto_select switch (default: True)
+    """
     
     return create_card(
-        title="⚙️ Configuración de Modelo ARIMA",
-        subtitle="Selecciona los parámetros del modelo",
+        title="⚙️ Modelo y ejecución",
+        subtitle="Configura el modelo y ejecuta el análisis",
         content=ui.div(
+            # Model type selector
             ui.div(
-                ui.input_switch("auto_arima", "Selección automática", value=True),
-                ui.tags.p("Activar para selección automática de parámetros", class_="text-muted"),
-                class_="mb-3"
+                ui.tags.h5("Tipo de modelo:"),
+                ui.output_ui("model_type_select"),
+                ui.output_ui("model_description"),
+                class_="mb-4"
             ),
+            # Auto-selection switch
             ui.div(
-                ui.div(
-                    create_form_group(
-                        label="Orden AR (p)",
-                        control=ui.input_numeric("ar_order", "Orden AR", value=1, min=0, max=10),
-                        help_text="Número de términos autorregresivos"
-                    ),
-                    create_form_group(
-                        label="Orden MA (q)",
-                        control=ui.input_numeric("ma_order", "Orden MA", value=1, min=0, max=10),
-                        help_text="Número de términos de media móvil"
-                    ),
-                    class_="col-md-6"
+                ui.input_switch("auto_select", "Selección automática de orden", value=auto_select_value),
+                ui.tags.p("Activar para que el modelo seleccione automáticamente los parámetros óptimos", class_="text-muted"),
+                class_="mb-4"
+            ),
+            # Manual parameters (shown when auto_select is False)
+            ui.output_ui("manual_parameters_ui"),
+            # Additional options
+            ui.div(
+                ui.tags.h5("Opciones adicionales:"),
+                create_form_group(
+                    label="Pasos a Pronosticar",
+                    control=ui.input_numeric("forecast_steps", "", value=10, min=1, max=100),
+                    help_text="Número de pasos futuros a predecir"
                 ),
+                ui.input_switch("include_confidence", "Incluir intervalos de confianza", value=True),
+                class_="mt-3"
+            ),
+            # Execution controls integrated here
+            ui.div(
+                ui.tags.h5("Ejecución:"),
+                ui.output_ui("execution_summary"),
                 ui.div(
-                    create_form_group(
-                        label="Diferenciación (d)",
-                        control=ui.input_numeric("diff_order", "Orden de diferenciación", value=1, min=0, max=3),
-                        help_text="Número de diferencias para estacionariedad"
-                    ),
-                    create_form_group(
-                        label="Paralelización",
-                        control=ui.input_slider("n_jobs", "Número de trabajos paralelos", min=1, max=8, value=4),
-                        help_text="Número de procesos paralelos para optimización"
-                    ),
-                    class_="col-md-6"
-                ),
-                class_="row"
+                    ui.input_action_button("start_execution", "▶️ Ajustar y pronosticar", class_="btn btn-primary btn-lg"),
+                    class_="my-3 text-center"
+                )
             )
         )
     )

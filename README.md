@@ -1,150 +1,134 @@
-# TSLib Shiny App - Análisis de Series de Tiempo
+# TSLib Shiny App – Interfaz de Análisis de Series de Tiempo
 
-Una aplicación web interactiva desarrollada con **Shiny for Python** para análisis avanzado de series de tiempo usando la librería TSLib.
-
-## 🚀 Características
-
-- **Pipeline completo** de análisis de series de tiempo
-- **Interfaz wizard/stepper** intuitiva
-- **Tema oscuro profesional** 
-- **Arquitectura basada en eventos** reactivos
-- **Organización modular** por features
-- **Procesamiento distribuido** (preparado para PySpark)
-
-## 📋 Pipeline de Análisis
-
-1. **📁 Upload** - Carga de datasets locales
-2. **📊 Visualization** - Visualización y estadísticas iniciales  
-3. **⚙️ Model Selection** - Selección de modelos ARIMA
-4. **🔄 Execution** - Ejecución de algoritmos en servidor
-5. **📈 Results** - Visualización de resultados y métricas
-6. **📄 Reports** - Generación de reportes descargables
-
-## 🛠️ Instalación
-
-### Prerrequisitos
-- Python 3.8+
-- pip
-
-### Pasos de instalación
-
-1. **Clonar el repositorio**
-```bash
-git clone <repository-url>
-cd tslib-shiny-app
-```
-
-2. **Instalar dependencias (crea entorno virtual automáticamente)**
-```bash
-make install
-```
-
-El Makefile detectará automáticamente si necesitas un entorno virtual y lo creará por ti.
-
-3. **Ejecutar la aplicación**
-```bash
-make run
-# o manualmente:
-python app.py
-```
-
-4. **Abrir en el navegador**
-La aplicación estará disponible en: `http://localhost:8000`
-
-## 📁 Estructura del Proyecto
-
-```
-tslib-shiny-app/
-├── app.py                    # Entry point
-├── features/                 # Módulos por feature
-│   ├── upload/              # Carga de datos
-│   ├── visualization/       # Visualización
-│   ├── model_selection/     # Selección de modelos
-│   ├── execution/           # Ejecución
-│   ├── results/             # Resultados
-│   └── reports/             # Reportes
-├── components/              # Componentes reutilizables
-├── static/                  # CSS y assets
-├── data/examples/           # Datasets de ejemplo
-├── requirements.txt         # Dependencias
-├── Makefile                # Comandos de desarrollo
-└── README.md               # Este archivo
-```
-
-## 🎯 Uso
-
-1. **Cargar datos**: Sube un archivo CSV/Excel con tu serie temporal
-2. **Explorar**: Visualiza la serie y analiza estadísticas básicas
-3. **Configurar**: Selecciona parámetros del modelo ARIMA
-4. **Ejecutar**: Inicia el análisis en el servidor
-5. **Evaluar**: Revisa resultados y métricas de rendimiento
-6. **Exportar**: Descarga reportes y datos procesados
-
-## 📊 Datasets de Ejemplo
-
-El proyecto incluye datasets de ejemplo en `data/examples/`:
-- `sales.csv` - Serie temporal de ventas
-- `temperature.csv` - Serie de temperaturas
-
-## 🛠️ Comandos de Desarrollo
-
-```bash
-make install    # Instalar dependencias (crea venv automáticamente)
-make run        # Ejecutar aplicación (requiere venv)
-make clean      # Limpiar archivos temporales
-make clean-all  # Limpiar todo incluyendo entorno virtual
-make format     # Formatear código
-make help       # Ver ayuda
-```
-
-### ⚠️ Notas Importantes:
-- **`make run` requiere entorno virtual**: Si no existe, te pedirá ejecutar `make install` primero
-- **`make install` es inteligente**: Crea el entorno virtual automáticamente si no existe
-- **`make clean-all`**: Elimina completamente el entorno virtual si necesitas empezar de cero
-
-## 🏗️ Arquitectura
-
-- **Frontend**: Shiny UI con componentes reactivos
-- **Backend**: Lógica de procesamiento con TSLib
-- **Paradigma**: Event-driven programming
-- **Estado**: Reactive values y session state
-- **Estilos**: CSS custom con tema oscuro
-
-## 🔧 Tecnologías
-
-- **Shiny for Python** - Framework web reactivo
-- **TSLib** - Librería de análisis de series de tiempo
-- **Pandas/NumPy** - Manipulación de datos
-- **Matplotlib/Plotly** - Visualizaciones
-- **PySpark** - Procesamiento distribuido (opcional)
-
-## 📝 Notas de Desarrollo
-
-- **UI en español**, comentarios en inglés
-- **Placeholders** para funcionalidad backend
-- **Tema oscuro** profesional
-- **Responsive design** básico
-- **Arquitectura escalable** para futuras funcionalidades
-
-## 🤝 Contribución
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -m 'Agregar nueva funcionalidad'`)
-4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver `LICENSE` para más detalles.
-
-## 🆘 Soporte
-
-Si tienes problemas o preguntas:
-- Abre un issue en GitHub
-- Revisa la documentación de [Shiny for Python](https://shiny.posit.co/py/)
-- Consulta la documentación de TSLib
+Aplicación web interactiva (Shiny for Python) para el análisis de series de tiempo. **Este repositorio es la interfaz (UI)** del proyecto de titulación; el núcleo algorítmico vive en el repositorio **time-series-library** (TSLib). La integración es unidireccional: esta app consume de TSLib; TSLib no depende de esta app.
 
 ---
 
-**Desarrollado con ❤️ para análisis avanzado de series de tiempo**
+## Proyecto de titulación: Dos partes en paralelo
+
+| Repositorio | Rol | Contenido |
+|-------------|-----|-----------|
+| **[time-series-library](https://github.com/jesus1612/TSLib)** | Librería (backend) | Modelos AR/MA/ARMA/ARIMA, validación, ACF/PACF, opcionalmente proceso de modelo ARIMA paralelo con PySpark |
+| **tslib-shiny-app** (este repo) | Interfaz (frontend) | Asistente por pasos (Wizard), carga de datos, visualización, selección de modelo, ejecución, sección de Benchmark de Rendimiento y resultados |
+
+La app llama a TSLib para validar los datos, ajustar los modelos, y obtener tanto pronósticos como métricas. Toda la interacción algorítmica con TSLib se realiza de forma limpia mediante `services/tslib_service.py`.
+
+---
+
+## Características Principales
+
+1. **Flujo Cautivador en 4 Pasos (Asistente)**: Carga de datos → Exploración → Modelo y ejecución → Resultados.
+2. **Modelos Secuenciales**: AR, MA, ARMA y ARIMA con auto-selección de orden directamente por TSLib.
+3. **Sección de Benchmark**: Evalúa y contrasta de manera sencilla y en una interfaz dedicada los modelos **secuenciales** versus **paralelos**.
+4. **Validación**: Integración al TSLib `DataValidator` para reportar NaN y observaciones anómalas (outliers).
+5. **Visualización y Exploración**: Serie temporal, ACF/PACF, estadísticas básicas, pronósticos y bandas de confianza.
+6. **Diseño y UI**: Tema oscuro, textos íntegramente en español, y un proyecto altamente modular.
+
+---
+
+## Estructura del Proyecto
+
+La estructura del código fomenta el aislamiento y la escalabilidad (Todo el código se mantiene en inglés siguiendo las mejores prácticas, mientras que la UI está en español):
+
+```
+tslib-shiny-app/
+├── app.py                    # Entry point de la aplicación de Shiny; orquestador de pasos y navbar
+├── components/               # UI components genéricos reutilizables
+│   ├── layout.py             # Cards, tablas, formularios, métricas
+│   └── stepper.py            # Componente de pasos del Asistente
+├── features/                 # Módulos del negocio
+│   ├── benchmark/            # [NUEVO] Sección y UI de Benchmark
+│   │   ├── server.py         # Lógica servidora del benchmark (BenchmarkRunner)
+│   │   └── ui.py             # UI de benchmark
+│   ├── upload/ui.py          # Carga de archivos CSV/Excel, mapeo de columnas
+│   ├── visualization/ui.py   # Gráfico de las series y calculos (ACF/PACF)
+│   ├── model_selection/ui.py # Tipo de modelo, flags de parámetros y ejecución
+│   └── results/ui.py         # Métricas, pronóstico, diagnósticos integrales
+├── services/
+│   └── tslib_service.py      # Capa de integración principal con TSLib
+├── data/examples/            # Archivos dummy para pruebas locales
+├── .gitignore                # Reglas de git y desactivador de archivos `.pyc`
+├── requirements.txt
+├── Makefile
+└── README.md                 # Este archivo
+```
+
+---
+
+## TSLib — Guía de Benchmarking y Paralelismo
+
+> **Referencia práctica para medir rendimiento y elegir la configuración óptima de `n_jobs`.**
+
+Se ha integrado a la interfaz una **sección nativa e independiente** para probar el Benchmark. Accede a ella desde la navegación superior (**"🚀 Benchmark"**).
+
+### ¿Qué mide el benchmark?
+La suite compara el tiempo de ajuste (fit) en modo **secuencial** (`n_jobs=1`) vs **paralelo** (`n_jobs=-1`, todos los núcleos) para los cuatro modelos de TSLib, barriendo distintos tamaños de serie (`n_obs`).
+
+La métrica clave generada en la visualización es el **speedup**:
+`speedup = tiempo_secuencial / tiempo_paralelo`
+
+| Speedup | Significado |
+|---------|-------------|
+| **> 1.10** | Paralelo gana ≥ 10% → **recomendado** |
+| **~ 1.00** | Neutro — overhead ≈ ganancia |
+| **< 1.00** | Paralelo pierde (overhead domina ← sumamente normal en series cortas) |
+
+### Resultados de Referencia en Interfaz (macOS, 8 núcleos M-series)
+
+> Tiempos presentados en segundos. Configurado en el entorno al tomar el mejor de 3 repeticiones.
+
+#### Speedup (`n_jobs=-1` vs `n_jobs=1`)
+
+| Modelo         | n=100 | n=500 | n=1 000 | n=5 000 | n=10 000 |
+|----------------|-------|-------|---------|---------|----------|
+| **AR(2)**          | 1.01  | 1.00  | 0.64    | 0.57    | 0.66     |
+| **MA(2)**          | 0.99  | 1.06  | 0.60    | 0.53    | 0.50     |
+| **ARMA(1,1)**      | 1.01  | 1.07  | 0.52    | 0.62    | 0.75     |
+| **ARIMA(1,1,1)**| 1.01 | 1.07  | **1.29 ✓**| 0.67  | 0.66     |
+
+> **Nota**: El speedup cae por debajo de 1 para series grandes porque el cuello de botella en AR/MA/ARMA puro es el `MLEOptimizer` (single-threaded dentro de scipy). El beneficio real de `n_jobs=-1` aparece cuando se ajustan **muchas series** con `GenericParallelProcessor`.
+
+### Umbrales de uso recomendados
+| Modelo | Usa modelo paralelo (`n_jobs=-1`) cuando… |
+|---------|-------------|
+| **ARIMA** | Muestreos grandes `n_obs >= 1000` |
+| **AR / MA / ARMA** | Muestreos inmensos `n_obs >= 5000` **ó** ajustando secuencias de >= 50 series |
+| **Todas + Spark** | Siempre - Spark logra la mejor paralelización distribuyendo las particiones de la serie |
+
+**Visualización**: Las gráficas generadas tendrán líneas correspondientes al tiempo secular versus paralelo. Además, mostrará el **"punto de codo"**, alertando visualmente dónde inicia la ganancia práctica.
+
+---
+
+## Requisitos y Configuración Inicial
+
+- **Python 3.8+**
+- Instancia activa de **Java (8 u 11)** para el correcto funcionamiento del modelo de Spark (Integrado en TSLib).
+- TSLib instalado interconetado.
+
+1. Instalar UI:
+```bash
+git clone <url-repo-tslib-shiny-app>
+cd tslib-shiny-app
+make install
+```
+
+2. Integrar TSLib:
+Ajusta la ruta de acuerdo con donde hayas guardado tu proyecto de `time-series-library`:
+```bash
+pip install -e /ruta/absoluta/a/tu/time-series-library
+```
+
+> **Aviso de Generación .pyc**: Esta app desactiva por defecto la generación de bytecodes compilados (`.pyc`) para mantener el árbol de desarrollo y las búsquedas más limpias. Está configurado mediante reglas en `.gitignore` o seteando globalmente `export PYTHONDONTWRITEBYTECODE=1` previo a correr scripts de desarrollo.
+
+### Para ejecutar el Servidor
+```bash
+make run
+```
+Luego visita en el navegador `http://localhost:8000`
+
+---
+
+## Tratamiento Computacional Avanzado
+
+1. **Paralelismo**: La UI detecta silenciosamente el uso de Spark. De no haber PySpark nativo para Spark, la aplicación retrocede de manera transparente a una secuencia lineal (dummy-safe) para evitar bloqueos del sistema. Las implementaciones subyacentes son administradas por el sistema backend (`services/tslib_service.py`).
+2. **Imputación Estricta**: TSLib requiere series matemáticamente impecables (sin `NaN`). Tras las validaciones iniciales de los datos del Wizard, la información faltante se somete a interpolación direccional (Forward-fill, ó reemplazos Cero) justo antes del entrenamiento y cálculo ACF para posibilitar el graficado. Todo el preprocesamiento fuerte lo gestiona el motor TSLib.
