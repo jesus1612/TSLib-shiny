@@ -59,13 +59,6 @@ def render_results_ui() -> ui.Tag:
                 ui.tags.h4("Modelo ARIMA Paralelo", class_="mb-3"),
                 ui.output_ui("parallel_model_section"),
                 class_="mb-4"
-            ),
-            # Export and report actions
-            ui.div(
-                ui.input_action_button("export_results", "💾 Exportar resultados (CSV)", class_="btn btn-primary"),
-                ui.input_action_button("generate_report", "📄 Generar reporte", class_="btn btn-secondary"),
-                ui.input_action_button("download_pdf", "📥 Descargar PDF", class_="btn btn-secondary"),
-                class_="d-flex gap-2 justify-center"
             )
         )
     )
