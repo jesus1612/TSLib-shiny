@@ -20,6 +20,8 @@ from features.upload.ui import render_upload_ui
 from features.visualization.ui import render_visualization_ui
 from features.model_selection.ui import render_model_selection_ui
 from features.results.ui import render_results_ui
+from features.benchmark.ui import render_benchmark_ui
+from features.benchmark.server import register_benchmark_server
 
 from services.tslib_service import TSLibService
 
@@ -782,17 +784,32 @@ app_ui = ui.page_fluid(
         )
     ),
     
-    # Main app layout
-    create_app_layout(
-        title="Análisis de Series de Tiempo",
-        subtitle="Análisis avanzado con modelos de series temporales"
-    ),
-    
-    
-    ui.output_ui("stepper_navigation"),
-    ui.div(
-        ui.output_ui("step_content"),
-        class_="container-fluid"
+    # Main app layout with Navbar
+    ui.page_navbar(
+        ui.nav_panel("🧪 Asistente de Análisis", 
+            create_app_layout(
+                title="Análisis de Series de Tiempo",
+                subtitle="Análisis avanzado con modelos de series temporales"
+            ),
+            ui.output_ui("stepper_navigation"),
+            ui.div(
+                ui.output_ui("step_content"),
+                class_="container-fluid"
+            )
+        ),
+        ui.nav_panel("🚀 Benchmark",
+            create_app_layout(
+                title="Suite de Benchmark Paralelo",
+                subtitle="Comparativa de tiempos de ajuste para todos los modelos"
+            ),
+            ui.div(
+                render_benchmark_ui(),
+                class_="container-fluid mt-4"
+            )
+        ),
+        title="TSLib",
+        bg="var(--bg-secondary)",
+        inverse=True
     )
 )
 
@@ -814,9 +831,17 @@ def server(input, output, session):
         "analysis_complete": False,
         "execution_log": [],
         "exploratory_analysis": None,
-        "auto_select": True
+        "auto_select": True,
+        # Benchmark specific state
+        "bench_status": "idle",
+        "bench_plot": None,
+        "bench_results": None,
+        "bench_error": None
     })
     uploaded_dataframe = reactive.Value(None)
+    
+    # Register benchmark server logic
+    register_benchmark_server(input, output, session, app_state)
     
     # Initialize TSLib service
     tslib_service = TSLibService()
@@ -2407,62 +2432,6 @@ def server(input, output, session):
                 type="error",
                 duration=5
             )
-    
-    # Export results handler
-    @reactive.effect
-    @reactive.event(input.export_results)
-    def handle_export_results():
-        """Handle results export"""
-        state = app_state.get()
-        if not state.get("analysis_complete"):
-            ui.notification_show(
-                "No hay resultados para exportar",
-                type="warning",
-                duration=3
-            )
-            return
-        
-        forecast_results = state.get("forecast_results")
-        if forecast_results:
-            # Create DataFrame with forecast results
-            forecast = forecast_results.get('forecast', [])
-            lower = forecast_results.get('lower_bound')
-            upper = forecast_results.get('upper_bound')
-            
-            export_data = {
-                'Step': [f"t+{i}" for i in range(1, len(forecast) + 1)],
-                'Forecast': forecast
-            }
-            
-            if lower is not None and upper is not None:
-                export_data['Lower_Bound'] = lower
-                export_data['Upper_Bound'] = upper
-            
-            df_export = pd.DataFrame(export_data)
-            
-            ui.notification_show(
-                "Funcionalidad de exportación preparada (requiere configuración adicional)",
-                type="message",
-                duration=3
-            )
-        else:
-            ui.notification_show(
-                "No hay pronóstico para exportar",
-                type="warning",
-                duration=3
-            )
-    
-    # Report generation handler
-    @reactive.effect
-    @reactive.event(input.generate_report)
-    def handle_generate_report():
-        """Handle report generation"""
-        # Simulate report generation
-        ui.notification_show(
-            "Reporte generado exitosamente",
-            type="success",
-            duration=3
-        )
     
     def validate_current_step(step: int, state: dict) -> bool:
         """Validate if current step can proceed to next"""
