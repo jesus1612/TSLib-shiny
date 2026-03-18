@@ -9,11 +9,10 @@ import os
 import io
 
 try:
-    from tests.test_benchmark_parallelism import BenchmarkRunner
+    from .runner import BenchmarkRunner
     BENCHMARK_AVAILABLE = True
 except ImportError:
     BENCHMARK_AVAILABLE = False
-
 
 def register_benchmark_server(input, output, session, app_state):
     """Register benchmark server functions"""
@@ -46,6 +45,27 @@ def register_benchmark_server(input, output, session, app_state):
             )
         
         return ui.div()
+
+    # Reactive button rendering for loading state
+    @output
+    @render.ui
+    def bench_run_button_ui():
+        state = app_state.get()
+        status = state.get("bench_status", "idle")
+        
+        if status == "running":
+            return ui.input_action_button(
+                "run_benchmark", 
+                "⏳ Procesando...", 
+                class_="btn btn-primary btn-lg w-100 mt-4 disabled",
+                disabled=True
+            )
+        
+        return ui.input_action_button(
+            "run_benchmark", 
+            "▶️ Ejecutar Benchmark", 
+            class_="btn btn-primary btn-lg w-100 mt-4"
+        )
     
     # Main execution handler
     @reactive.Effect
@@ -196,7 +216,8 @@ def register_benchmark_server(input, output, session, app_state):
 def _create_elbow_plot(runner):
     """Recreates the runner's internal plot securely for Shiny."""
     n_models = len(runner.models)
-    fig, axes = plt.subplots(n_models, 2, figsize=(14, 4 * n_models), squeeze=False)
+    # Increase vertical space: 5 inches per model to avoid overlap
+    fig, axes = plt.subplots(n_models, 2, figsize=(14, 5 * n_models), squeeze=False)
     
     speedups = runner.speedups()
     
@@ -206,55 +227,58 @@ def _create_elbow_plot(runner):
         
         n_obs = runner.n_obs_grid
         t_seq = [runner.results[model_name][n]['sequential'] for n in n_obs]
-        t_par = [runner.results[model_name][n]['parallel'] for n in n_obs]
+        t_par = [runner.results[model_name][n]['parallel_all'] for n in n_obs]
         
         # 1. Fit Time Plot
-        ax_time.plot(n_obs, t_seq, 'o-', color='tab:red', label='Secuencial (n_jobs=1)')
-        ax_time.plot(n_obs, t_par, 's-', color='tab:green', label='Paralelo (n_jobs=-1)')
-        ax_time.set_title(f'{model_name} - Tiempo de Ajuste')
-        ax_time.set_xlabel('Tamaño de Serie (n_obs)')
-        ax_time.set_ylabel('Tiempo (segundos)')
+        ax_time.plot(n_obs, t_seq, 'o-', color='#ff6b6b', label='Secuencial (n_jobs=1)', linewidth=2)
+        ax_time.plot(n_obs, t_par, 's-', color='#10ac84', label='Paralelo (n_jobs=-1)', linewidth=2)
+        # ax_time.set_title(f'{model_name} - Tiempo de Ajuste', fontsize=13, pad=15)
+        ax_time.set_xlabel('Tamaño de Serie (n_obs)', fontsize=10)
+        ax_time.set_ylabel('Tiempo (segundos)', fontsize=10)
         ax_time.set_xscale('log')
-        ax_time.grid(True, alpha=0.3)
-        ax_time.legend()
+        ax_time.grid(True, alpha=0.2, linestyle=':')
+        ax_time.legend(loc='upper left', fontsize=9)
         
         # 2. Speedup Plot
         s_vals = [speedups[model_name][n] for n in n_obs]
-        ax_speedup.plot(n_obs, s_vals, 'o-', color='tab:blue', label='Speedup')
-        ax_speedup.axhline(y=1.0, color='gray', linestyle='--', alpha=0.5, label='Punto de Equilibrio (1x)')
-        ax_speedup.axhline(y=1.1, color='tab:orange', linestyle=':', label='Umbral Recomendado (1.1x)')
+        ax_speedup.plot(n_obs, s_vals, 'o-', color='#54a0ff', label='Speedup', linewidth=2.5)
+        ax_speedup.axhline(y=1.0, color='#8395a7', linestyle='--', alpha=0.6, label='Equilibrio (1x)')
+        ax_speedup.axhline(y=1.1, color='#ff9f43', linestyle=':', linewidth=2, label='Umbral (1.1x)')
         
         # Highlight elbow
         elbow = runner.elbow_threshold()[model_name]
         if elbow is not None:
-            ax_speedup.axvline(x=elbow, color='tab:orange', alpha=0.4, linewidth=10, zorder=0)
-            ax_speedup.text(elbow, 1.2, ' Codo', color='tab:orange', fontweight='bold')
+            ax_speedup.axvline(x=elbow, color='#ff9f43', alpha=0.2, linewidth=12, zorder=0)
+            ax_speedup.text(elbow, max(s_vals)*0.9, ' Codo', color='#ff9f43', fontweight='bold', fontsize=10)
             
-        ax_speedup.set_title(f'{model_name} - Aceleración (Speedup)')
-        ax_speedup.set_xlabel('Tamaño de Serie (n_obs)')
-        ax_speedup.set_ylabel('Speedup (Secuencial / Paralelo)')
+        # ax_speedup.set_title(f'{model_name} - Aceleración (Speedup)', fontsize=13, pad=15)
+        ax_speedup.set_xlabel('Tamaño de Serie (n_obs)', fontsize=10)
+        ax_speedup.set_ylabel('Speedup (Sec / Par)', fontsize=10)
         ax_speedup.set_xscale('log')
-        ax_speedup.grid(True, alpha=0.3)
-        ax_speedup.legend()
+        ax_speedup.grid(True, alpha=0.2, linestyle=':')
+        ax_speedup.legend(loc='upper left', fontsize=9)
     
     fig.patch.set_facecolor('#1a1a1a')
     for ax in axes.flatten():
-        ax.set_facecolor('#2d2d2d')
-        ax.tick_params(colors='white')
-        ax.xaxis.label.set_color('white')
-        ax.yaxis.label.set_color('white')
+        ax.set_facecolor('#262626')
+        ax.tick_params(colors='white', labelsize=9)
+        ax.xaxis.label.set_color('#cccccc')
+        ax.yaxis.label.set_color('#cccccc')
         ax.title.set_color('white')
-        ax.spines['bottom'].set_color('white')
-        ax.spines['left'].set_color('white')
+        ax.spines['bottom'].set_color('#444444')
+        ax.spines['left'].set_color('#444444')
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        # Fix legend colors
+        
+        # Fix legend visual
         legend = ax.get_legend()
         if legend:
             for text in legend.get_texts():
                 text.set_color('white')
-            legend.get_frame().set_facecolor('#2d2d2d')
-            legend.get_frame().set_edgecolor('white')
+            legend.get_frame().set_facecolor('#1a1a1a')
+            legend.get_frame().set_edgecolor('#444444')
+            legend.get_frame().set_alpha(0.8)
             
-    plt.tight_layout()
+    # Adjust layout to prevent overlap explicitly
+    plt.tight_layout(pad=4.0)
     return fig

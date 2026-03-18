@@ -31,10 +31,10 @@ def render_benchmark_ui() -> ui.Tag:
                         create_form_group(
                             label="Repeticiones por tamaño",
                             control=ui.input_numeric("bench_repeats", "", value=3, min=1, max=10),
-                            help_text="Número de veces a ejecutar para tomar el menor tiempo"
+                            help_text="Número de veces a ejecutar cada prueba para evitar ruido del CPU (se guarda el mejor tiempo)"
                         ),
                         ui.div(
-                            ui.input_action_button("run_benchmark", "▶️ Ejecutar Benchmark", class_="btn btn-primary btn-lg w-100 mt-4"),
+                            ui.output_ui("bench_run_button_ui"),
                             class_="text-center"
                         ),
                         ui.output_ui("bench_execution_status")
