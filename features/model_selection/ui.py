@@ -2,7 +2,11 @@
 from shiny import ui
 from components.layout import create_card, create_form_group
 
-def render_model_selection_ui(auto_select_value: bool = True) -> ui.Tag:
+
+def render_model_selection_ui(
+    auto_select_value: bool = True,
+    imputation_mode_value: str = "auto",
+) -> ui.Tag:
     """Render model selection step UI components
     
     Args:
@@ -24,6 +28,25 @@ def render_model_selection_ui(auto_select_value: bool = True) -> ui.Tag:
             ui.div(
                 ui.input_switch("auto_select", "Selección automática de orden", value=auto_select_value),
                 ui.tags.p("Activar para que el modelo seleccione automáticamente los parámetros óptimos", class_="text-muted"),
+                class_="mb-4"
+            ),
+            # Imputation mode
+            ui.div(
+                ui.tags.h5("Imputación de faltantes:"),
+                ui.input_select(
+                    "imputation_mode",
+                    "",
+                    choices={
+                        "auto": "Imputación automática",
+                        "manual": "Imputación manual",
+                    },
+                    selected=imputation_mode_value,
+                ),
+                ui.output_ui("imputation_manual_ui"),
+                ui.tags.p(
+                    "La imputación se aplica solo cuando hay valores faltantes y la serie pasa validación.",
+                    class_="text-muted",
+                ),
                 class_="mb-4"
             ),
             # Manual parameters (shown when auto_select is False)

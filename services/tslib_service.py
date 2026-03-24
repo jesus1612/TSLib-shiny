@@ -10,8 +10,130 @@ import logging
 # Import TSLib components
 from tslib import ARModel, MAModel, ARMAModel, ARIMAModel
 from tslib.preprocessing.validation import DataValidator
+from tslib.preprocessing import (
+    impute_linear_1d,
+    impute_locf_1d,
+    impute_seasonal_1d,
+    estimate_seasonal_period_1d,
+    suggest_datetime_column,
+    suggest_numeric_columns,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _validator_issue_to_spanish(issue: str) -> str:
+    """Map known DataValidator English issues to Spanish UI strings."""
+    if issue.startswith("Too many missing values"):
+        return (
+            "Valores faltantes por encima del umbral permitido "
+            "(ver política documentada; por defecto 10 % de la serie)."
+        )
+    if issue.startswith("Data too short"):
+        return "La serie no alcanza la longitud mínima requerida por el validador."
+    if issue == "Infinite values detected":
+        return "Se detectaron valores infinitos en la serie."
+    return issue
+
+
+def _validator_warning_to_spanish(warning: str) -> str:
+    if warning.startswith("Missing values detected"):
+        return "Hay valores faltantes dentro del umbral aceptado; revisa imputación y advertencias."
+    if warning.startswith("Outliers detected"):
+        return "Se detectaron outliers; conviene revisar su impacto antes del ajuste."
+    if warning.startswith("Constant data detected"):
+        return "Serie constante detectada; valora si es adecuada para modelos de series."
+    if "Seasonal patterns" in warning:
+        return (
+            "Posible estacionalidad detectada por autocorrelación "
+            "(lags comunes 4, 7, 12, 24; umbral aproximado |ACF| > 0.3)."
+        )
+    if "Trend detected" in warning:
+        return "Posible tendencia; puede requerir diferenciación según el modelo."
+    return warning
+
+
+def _validator_recommendation_to_spanish(recommendation: str) -> str:
+    if "Seasonal patterns detected" in recommendation:
+        return (
+            "Se recomienda considerar un enfoque estacional: el validador encontró "
+            "señal en autocorrelación para periodos típicos."
+        )
+    if "Trend detected - consider differencing" in recommendation:
+        return "Se recomienda considerar diferenciación por presencia de tendencia."
+    if "Consider outlier treatment before modeling" in recommendation:
+        return "Se recomienda tratar outliers antes de modelar."
+    if "Consider if this is appropriate for time series analysis" in recommendation:
+        return "Se recomienda revisar si una serie constante es adecuada para el análisis."
+    return recommendation
+
+
+def _has_strong_seasonality(validation_report: Optional[Dict[str, Any]]) -> bool:
+    """Detecta señal de estacionalidad fuerte desde recomendaciones del validador."""
+    if not validation_report:
+        return False
+    recs = validation_report.get("recommendations", [])
+    return any("Seasonal patterns detected" in str(r) for r in recs)
+
+
+def _has_trend_signal(validation_report: Optional[Dict[str, Any]]) -> bool:
+    """Detecta señal de tendencia desde recomendaciones del validador."""
+    if not validation_report:
+        return False
+    recs = validation_report.get("recommendations", [])
+    return any("Trend detected" in str(r) for r in recs)
+
+
+def _select_imputation_strategy(
+    data: np.ndarray,
+    model_type: str,
+    validation_report: Optional[Dict[str, Any]] = None,
+    prefer_seasonal_imputation: bool = False,
+    imputation_mode: str = "auto",
+    manual_imputation_type: Optional[str] = None,
+) -> Tuple[str, Optional[int]]:
+    """
+    Selecciona estrategia de imputación dinámica.
+
+    Reglas:
+    - Si el usuario marca preferencia estacional, se intenta estacional.
+    - Si hay señal fuerte de estacionalidad en validación, se intenta estacional.
+    - Si hay señal de tendencia y modelo ARIMA, se usa LOCF como baseline robusto.
+    - En cualquier otro caso, interpolación lineal.
+    """
+    x = np.asarray(data, dtype=float)
+    if imputation_mode == "manual":
+        manual = (manual_imputation_type or "lineal").lower()
+        if manual in ("estacional", "seasonal"):
+            period = estimate_seasonal_period_1d(x)
+            if period is not None:
+                return "seasonal", period
+            return "linear", None
+        if manual in ("locf", "forward_fill"):
+            return "locf", None
+        return "linear", None
+
+    seasonality_signal = prefer_seasonal_imputation or _has_strong_seasonality(validation_report)
+    if seasonality_signal:
+        period = estimate_seasonal_period_1d(x)
+        if period is not None:
+            return "seasonal", period
+    if model_type == "ARIMA" and _has_trend_signal(validation_report):
+        return "locf", None
+    return "linear", None
+
+
+def _apply_imputation_strategy(
+    data: np.ndarray,
+    strategy: str,
+    period: Optional[int] = None,
+) -> np.ndarray:
+    """Aplica la estrategia de imputación seleccionada."""
+    if strategy == "seasonal" and period is not None:
+        return impute_seasonal_1d(data, period=period)
+    if strategy == "locf":
+        return impute_locf_1d(data)
+    return impute_linear_1d(data)
 
 PARALLEL_ARIMA_AVAILABLE = False
 SPARK_CHECKED = False
@@ -62,44 +184,56 @@ class TSLibService:
             else:
                 data = self.convert_to_numeric(df, column).values
 
-            is_valid = self.validator.validate(data)
+            vr = self.validator.validate(data)
+            tslib_ok = bool(vr.get("is_valid", False))
+
             messages = []
-            warnings = []
+            for issue in vr.get("issues", []):
+                messages.append(_validator_issue_to_spanish(issue))
+
+            warnings = [_validator_warning_to_spanish(w) for w in vr.get("warnings", [])]
+            for rec in vr.get("recommendations", []):
+                warnings.append(_validator_recommendation_to_spanish(str(rec)))
 
             if np.any(np.isnan(data)):
-                missing_count = np.sum(np.isnan(data))
+                missing_count = int(np.sum(np.isnan(data)))
                 missing_pct = (missing_count / len(data)) * 100
                 warnings.append(f"Datos faltantes: {missing_count} ({missing_pct:.2f}%)")
-            
+
             if len(data) < 30:
-                warnings.append("Serie temporal corta (< 30 observaciones). Resultados pueden no ser confiables.")
-            
+                warnings.append(
+                    "Serie temporal corta (menos de 30 observaciones). "
+                    "Los resultados pueden ser poco fiables."
+                )
+
             if np.any(np.isinf(data)):
-                warnings.append("Valores infinitos detectados")
-            
-            q1 = np.percentile(data[~np.isnan(data)], 25)
-            q3 = np.percentile(data[~np.isnan(data)], 75)
-            iqr = q3 - q1
-            lower_bound = q1 - 1.5 * iqr
-            upper_bound = q3 + 1.5 * iqr
-            outliers = np.sum((data < lower_bound) | (data > upper_bound))
-            if outliers > 0:
-                warnings.append(f"Outliers detectados: {outliers}")
-            
-            if is_valid:
-                messages.append("✓ Datos válidos para análisis")
-            else:
-                messages.append("✗ Los datos requieren preprocesamiento")
-            
+                warnings.append("Valores infinitos detectados en la columna.")
+
+            finite = data[np.isfinite(data)]
+            if len(finite) >= 4:
+                q1 = np.percentile(finite, 25)
+                q3 = np.percentile(finite, 75)
+                iqr = q3 - q1
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+                outliers = int(np.sum((data < lower_bound) | (data > upper_bound)))
+                if outliers > 0:
+                    warnings.append(f"Outliers detectados (IQR servicio): {outliers}")
+
+            if tslib_ok and not messages:
+                messages.append("✓ Datos válidos para análisis según TSLib")
+            elif not tslib_ok:
+                messages.insert(0, "✗ Los datos no pasan la validación de TSLib")
+
             return {
-                'valid': is_valid or len(warnings) == 0,  # Consider valid if no critical warnings
-                'messages': messages,
-                'warnings': warnings,
-                'quality_report': {},
-                'length': len(data),
-                'has_issues': len(warnings) > 0
+                "valid": tslib_ok,
+                "messages": messages,
+                "warnings": warnings,
+                "quality_report": vr,
+                "length": len(data),
+                "has_issues": len(warnings) > 0 or not tslib_ok,
             }
-            
+
         except Exception as e:
             return {
                 'valid': False,
@@ -112,82 +246,15 @@ class TSLibService:
     
     def detect_datetime_column(self, df: pd.DataFrame) -> Optional[str]:
         """
-        Detect datetime column in DataFrame
-        
-        Args:
-            df: DataFrame to analyze
-            
-        Returns:
-            Name of detected datetime column or None
+        Suggest a datetime column using TSLib heuristics (name, dtype, parse sample).
         """
-        # Common datetime column names
-        datetime_keywords = ['date', 'time', 'timestamp', 'fecha', 'tiempo', 'datetime']
-        
-        for col in df.columns:
-            # Check by name
-            if any(keyword in col.lower() for keyword in datetime_keywords):
-                return col
-            
-            # Check by dtype
-            if pd.api.types.is_datetime64_any_dtype(df[col]):
-                return col
-            
-            # Try to parse as datetime
-            try:
-                pd.to_datetime(df[col].head(10))
-                return col
-            except:
-                continue
-        
-        return None
+        return suggest_datetime_column(df)
     
     def get_numeric_columns(self, df: pd.DataFrame) -> List[str]:
         """
-        Get list of numeric columns from DataFrame
-        Includes columns that can be converted to numeric (e.g., currency format)
-        
-        Args:
-            df: DataFrame to analyze
-            
-        Returns:
-            List of numeric column names
+        Suggest numeric value columns using TSLib heuristics (dtypes + convertible strings).
         """
-        numeric_cols = []
-        
-        # First, add columns that are already numeric
-        numeric_cols.extend(df.select_dtypes(include=[np.number]).columns.tolist())
-        
-        # Then, check string columns that might contain numeric data
-        string_cols = df.select_dtypes(include=['object']).columns
-        
-        for col in string_cols:
-            # Skip if already identified as numeric
-            if col in numeric_cols:
-                continue
-            
-            # Try to convert to numeric (handles currency, percentages, etc.)
-            try:
-                # Take a sample to test conversion
-                sample = df[col].dropna().head(10)
-                if len(sample) == 0:
-                    continue
-                
-                # Try to convert removing common non-numeric characters
-                test_values = sample.astype(str).str.replace('$', '', regex=False)
-                test_values = test_values.str.replace(',', '', regex=False)
-                test_values = test_values.str.replace('%', '', regex=False)
-                test_values = test_values.str.strip()
-                
-                # Try conversion
-                pd.to_numeric(test_values, errors='raise')
-                
-                # If successful, add to numeric columns
-                numeric_cols.append(col)
-            except (ValueError, TypeError, AttributeError):
-                # Not convertible to numeric
-                continue
-        
-        return numeric_cols
+        return suggest_numeric_columns(df)
     
     def convert_to_numeric(self, df: pd.DataFrame, column: str) -> pd.Series:
         """
@@ -219,6 +286,10 @@ class TSLibService:
         model_type: str,
         order: Tuple[int, ...],
         auto_select: bool = False,
+        validation_report: Optional[Dict[str, Any]] = None,
+        prefer_seasonal_imputation: bool = False,
+        imputation_mode: str = "auto",
+        manual_imputation_type: Optional[str] = None,
         **kwargs
     ) -> Any:
         """
@@ -235,17 +306,20 @@ class TSLibService:
             Fitted model instance
         """
         try:
-            # Impute missing values (forward fill) before fitting; TSLib does not accept NaN
-            data_clean = data.copy()
-            if np.any(np.isnan(data_clean)):
-                mask = np.isnan(data_clean)
-                indices = np.arange(len(data_clean))
-                if np.any(~mask):  # If there are any non-NaN values
-                    data_clean[mask] = np.interp(indices[mask], indices[~mask], data_clean[~mask])
-                else:
-                    # All values are NaN, use zeros
-                    data_clean = np.zeros_like(data_clean)
-            
+            imputation_strategy, imputation_period = _select_imputation_strategy(
+                data=data,
+                model_type=model_type,
+                validation_report=validation_report,
+                prefer_seasonal_imputation=prefer_seasonal_imputation,
+                imputation_mode=imputation_mode,
+                manual_imputation_type=manual_imputation_type,
+            )
+            data_clean = _apply_imputation_strategy(
+                np.asarray(data, dtype=float),
+                strategy=imputation_strategy,
+                period=imputation_period,
+            )
+
             if model_type == 'AR':
                 model = ARModel(
                     order=order[0] if not auto_select else None,
@@ -359,7 +433,14 @@ class TSLibService:
             logger.exception("Error extracting metrics: %s", e)
             return {}
     
-    def get_exploratory_analysis(self, data: np.ndarray) -> Dict[str, Any]:
+    def get_exploratory_analysis(
+        self,
+        data: np.ndarray,
+        validation_report: Optional[Dict[str, Any]] = None,
+        prefer_seasonal_imputation: bool = False,
+        imputation_mode: str = "auto",
+        manual_imputation_type: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Get exploratory analysis including ACF/PACF (handles missing values)
         
@@ -373,18 +454,20 @@ class TSLibService:
             # Check minimum data requirement for ACF/PACF
             MIN_DATA_FOR_ACF = 10  # Minimum observations needed for ACF/PACF
             
-            # Handle missing values: forward fill for analysis
-            data_clean = data.copy()
-            if np.any(np.isnan(data_clean)):
-                # Forward fill missing values
-                mask = np.isnan(data_clean)
-                indices = np.arange(len(data_clean))
-                if np.any(~mask):  # If there are any non-NaN values
-                    data_clean[mask] = np.interp(indices[mask], indices[~mask], data_clean[~mask])
-                else:
-                    # All values are NaN, use zeros
-                    data_clean = np.zeros_like(data_clean)
-            
+            imputation_strategy, imputation_period = _select_imputation_strategy(
+                data=data,
+                model_type="ARIMA",
+                validation_report=validation_report,
+                prefer_seasonal_imputation=prefer_seasonal_imputation,
+                imputation_mode=imputation_mode,
+                manual_imputation_type=manual_imputation_type,
+            )
+            data_clean = _apply_imputation_strategy(
+                np.asarray(data, dtype=float),
+                strategy=imputation_strategy,
+                period=imputation_period,
+            )
+
             # Basic statistics (using cleaned data but noting missing values)
             valid_data = data[~np.isnan(data)] if np.any(np.isnan(data)) else data
             stats = {
@@ -571,30 +654,40 @@ class TSLibService:
     def fit_parallel_arima(
         self,
         data: np.ndarray,
-        verbose: bool = True
+        verbose: bool = True,
+        validation_report: Optional[Dict[str, Any]] = None,
+        prefer_seasonal_imputation: bool = False,
+        imputation_mode: str = "auto",
+        manual_imputation_type: Optional[str] = None,
     ) -> Any:
         """
         Fit parallel ARIMA: uses TSLib ParallelARIMAWorkflow when Spark is available,
         otherwise a linear fallback workflow for compatibility.
         """
+        imputation_strategy, imputation_period = _select_imputation_strategy(
+            data=data,
+            model_type="ARIMA",
+            validation_report=validation_report,
+            prefer_seasonal_imputation=prefer_seasonal_imputation,
+            imputation_mode=imputation_mode,
+            manual_imputation_type=manual_imputation_type,
+        )
+        data_clean = _apply_imputation_strategy(
+            np.asarray(data, dtype=float),
+            strategy=imputation_strategy,
+            period=imputation_period,
+        )
+
         if PARALLEL_ARIMA_AVAILABLE and ParallelARIMAWorkflow is not None:
             try:
                 workflow = ParallelARIMAWorkflow(verbose=verbose)
-                workflow.fit(data)
+                workflow.fit(data_clean)
                 return workflow
             except Exception as e:
                 logger.warning("Parallel ARIMA failed, using fallback: %s", e)
 
         logger.info("Using linear fallback for ARIMA (Spark not available or failed)")
-        
-        # Handle missing values by filling with forward fill
-        data_clean = data.copy()
-        if np.any(np.isnan(data_clean)):
-            # Forward fill missing values
-            mask = np.isnan(data_clean)
-            indices = np.arange(len(data_clean))
-            data_clean[mask] = np.interp(indices[mask], indices[~mask], data_clean[~mask])
-        
+
         # Create a dummy workflow object
         class DummyParallelWorkflow:
             def __init__(self, data, order=(1, 1, 1)):

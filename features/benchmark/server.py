@@ -164,7 +164,7 @@ def register_benchmark_server(input, output, session, app_state):
         if status == "done" and results:
             return ui.div(
                 ui.output_plot("bench_elbow_plot", height="800px"),
-                ui.tags.h5("Resumen de 'Codos' (Speedup >= 1.1x)", class_="mt-4"),
+                ui.tags.h5("Resumen", class_="mt-4"),
                 ui.output_ui("bench_summary_cards")
             )
             

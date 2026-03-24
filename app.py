@@ -24,6 +24,7 @@ from features.benchmark.ui import render_benchmark_ui
 from features.benchmark.server import register_benchmark_server
 
 from services.tslib_service import TSLibService
+from config_limits import MAX_UPLOAD_FILE_BYTES
 
 STEPS = [
     {
@@ -832,6 +833,9 @@ def server(input, output, session):
         "execution_log": [],
         "exploratory_analysis": None,
         "auto_select": True,
+        "prefer_seasonal_imputation": False,
+        "imputation_mode": "auto",
+        "manual_imputation_type": "lineal",
         # Benchmark specific state
         "bench_status": "idle",
         "bench_plot": None,
@@ -929,7 +933,11 @@ def server(input, output, session):
             return render_visualization_ui()
         elif current_step == 2:
             auto_select_value = state.get("auto_select", True)
-            return render_model_selection_ui(auto_select_value=auto_select_value)
+            imputation_mode_value = state.get("imputation_mode", "auto")
+            return render_model_selection_ui(
+                auto_select_value=auto_select_value,
+                imputation_mode_value=imputation_mode_value,
+            )
         elif current_step == 3:
             return render_results_ui()
         else:
@@ -1513,6 +1521,34 @@ def server(input, output, session):
             )
         
         return ui.div()
+
+    @render.ui
+    def imputation_manual_ui():
+        """Render manual imputation selector when mode is manual."""
+        if not hasattr(input, "imputation_mode"):
+            return ui.div()
+        mode = input.imputation_mode()
+        if mode != "manual":
+            return ui.div()
+        state = app_state.get()
+        current = state.get("manual_imputation_type", "lineal")
+        return ui.div(
+            create_form_group(
+                label="Tipo de imputación",
+                control=ui.input_select(
+                    "manual_imputation_type",
+                    "",
+                    choices={
+                        "lineal": "Interpolación lineal",
+                        "locf": "LOCF (último valor observado)",
+                        "estacional": "Estacional (si se detecta periodo)",
+                    },
+                    selected=current,
+                ),
+                help_text="En estacional, si no se puede estimar periodo se usa lineal.",
+            ),
+            class_="mb-3",
+        )
     
     # Navigation event handlers
     @reactive.effect
@@ -1551,11 +1587,18 @@ def server(input, output, session):
         model_type = state.get("model_type", "N/A")
         value_col = state.get("value_column", "N/A")
         auto_select = input.auto_select() if hasattr(input, 'auto_select') else True
+        imputation_mode = state.get("imputation_mode", "auto")
+        manual_imputation_type = state.get("manual_imputation_type", "lineal")
+        if imputation_mode == "manual":
+            imput_text = f"Manual ({manual_imputation_type})"
+        else:
+            imput_text = "Automática"
         
         return ui.div(
             ui.tags.p(f"Modelo: {model_type}"),
             ui.tags.p(f"Columna de datos: {value_col}"),
             ui.tags.p(f"Auto-selección: {'Sí' if auto_select else 'No'}"),
+            ui.tags.p(f"Imputación: {imput_text}"),
             class_="text-muted"
         )
     
@@ -2137,7 +2180,21 @@ def server(input, output, session):
         temp_path = file_metadata.get("datapath")
         file_name = file_metadata.get("name", "dataset")
         file_size = file_metadata.get("size")
-        
+
+        if file_size is not None and file_size > MAX_UPLOAD_FILE_BYTES:
+            uploaded_dataframe.set(None)
+            new_state = app_state.get().copy()
+            new_state["data_loaded"] = False
+            new_state["uploaded_data"] = None
+            app_state.set(new_state)
+            limit_mb = MAX_UPLOAD_FILE_BYTES // (1024 * 1024)
+            ui.notification_show(
+                f"El archivo supera el límite de {limit_mb} MB. Reduce el tamaño o divide los datos.",
+                type="error",
+                duration=8,
+            )
+            return
+
         try:
             if file_name.lower().endswith(".csv"):
                 df = pd.read_csv(temp_path)
@@ -2224,8 +2281,14 @@ def server(input, output, session):
             else:
                 data = tslib_service.convert_to_numeric(df, value_col).values
             
-            # Note: get_exploratory_analysis handles missing values internally
-            exploratory = tslib_service.get_exploratory_analysis(data)
+            # Note: get_exploratory_analysis maneja imputación interna
+            exploratory = tslib_service.get_exploratory_analysis(
+                data,
+                validation_report=validation_result.get("quality_report", {}),
+                prefer_seasonal_imputation=bool(state.get("prefer_seasonal_imputation", False)),
+                imputation_mode=state.get("imputation_mode", "auto"),
+                manual_imputation_type=state.get("manual_imputation_type", "lineal"),
+            )
             
             # Update state
             new_state = state.copy()
@@ -2284,6 +2347,50 @@ def server(input, output, session):
             app_state.set(new_state)
         except Exception as e:
             # If there's an error getting the value, don't update state
+            pass
+
+    @reactive.effect
+    @reactive.event(input.prefer_seasonal_imputation)
+    def handle_prefer_seasonal_imputation_change():
+        """Persist optional seasonal-imputation preference if UI control exists."""
+        if not hasattr(input, "prefer_seasonal_imputation"):
+            return
+        try:
+            seasonal_pref = bool(input.prefer_seasonal_imputation())
+            new_state = app_state.get().copy()
+            new_state["prefer_seasonal_imputation"] = seasonal_pref
+            app_state.set(new_state)
+        except Exception:
+            pass
+
+    @reactive.effect
+    @reactive.event(input.imputation_mode)
+    def handle_imputation_mode_change():
+        """Persist imputation mode (auto/manual)."""
+        if not hasattr(input, "imputation_mode"):
+            return
+        try:
+            mode = input.imputation_mode()
+            new_state = app_state.get().copy()
+            new_state["imputation_mode"] = mode if mode in ["auto", "manual"] else "auto"
+            app_state.set(new_state)
+        except Exception:
+            pass
+
+    @reactive.effect
+    @reactive.event(input.manual_imputation_type)
+    def handle_manual_imputation_type_change():
+        """Persist selected manual imputation type."""
+        if not hasattr(input, "manual_imputation_type"):
+            return
+        try:
+            selected = input.manual_imputation_type()
+            if selected not in ["lineal", "locf", "estacional"]:
+                selected = "lineal"
+            new_state = app_state.get().copy()
+            new_state["manual_imputation_type"] = selected
+            app_state.set(new_state)
+        except Exception:
             pass
 
     # Model execution handler
@@ -2361,7 +2468,11 @@ def server(input, output, session):
                 data=data,
                 model_type=model_type,
                 order=order if order else (1,) if model_type in ["AR", "MA"] else (1, 1) if model_type == "ARMA" else (1, 1, 1),
-                auto_select=auto_select
+                auto_select=auto_select,
+                validation_report=(state.get("validation_report", {}) or {}).get("quality_report", {}),
+                prefer_seasonal_imputation=bool(state.get("prefer_seasonal_imputation", False)),
+                imputation_mode=state.get("imputation_mode", "auto"),
+                manual_imputation_type=state.get("manual_imputation_type", "lineal"),
             )
             
             # Update log
@@ -2385,7 +2496,11 @@ def server(input, output, session):
                 try:
                     parallel_workflow = tslib_service.fit_parallel_arima(
                         data=data,
-                        verbose=False
+                        verbose=False,
+                        validation_report=(state.get("validation_report", {}) or {}).get("quality_report", {}),
+                        prefer_seasonal_imputation=bool(state.get("prefer_seasonal_imputation", False)),
+                        imputation_mode=state.get("imputation_mode", "auto"),
+                        manual_imputation_type=state.get("manual_imputation_type", "lineal"),
                     )
                     new_state = app_state.get().copy()
                     new_state["execution_log"].append("Generando pronóstico (modelo paralelo)...")
